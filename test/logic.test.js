@@ -200,4 +200,30 @@ test('vehicleFromNhtsa flags an empty / failed decode', () => {
   assert.equal(L.vehicleFromNhtsa(null).ok, false);
 });
 
+test('registration: ok, due soon within 30 days, overdue once past', () => {
+  const today = new Date(2026, 9, 4);
+  assert.equal(L.registrationStatus({}, today), null);
+  assert.deepEqual(L.registrationStatus({ regExpires: '2027-03-31' }, today), { date: '2027-03-31', days: 178, when: 'in 6 months', status: 'ok' });
+  assert.equal(L.registrationStatus({ regExpires: '2026-10-20' }, today).status, 'soon');
+  assert.equal(L.registrationStatus({ regExpires: '2026-10-20' }, today).when, 'in 16 days');
+  assert.equal(L.registrationStatus({ regExpires: '2026-10-04' }, today).when, 'today');
+  const late = L.registrationStatus({ regExpires: '2026-09-01' }, today);
+  assert.equal(late.status, 'overdue');
+  assert.equal(late.when, '33 days ago');
+});
+
+test('registration: renewing moves the date a year on (from today if it had long lapsed)', () => {
+  const today = new Date(2026, 9, 4);
+  assert.equal(L.renewedRegistration({ regExpires: '2026-10-20' }, 1, today), '2027-10-20');
+  assert.equal(L.renewedRegistration({ regExpires: '2026-09-01' }, 1, today), '2027-09-01'); // a month late keeps its cycle
+  assert.equal(L.renewedRegistration({ regExpires: '2024-01-01' }, 1, today), '2027-10-04');
+  assert.equal(L.renewedRegistration({}, 2, today), '2028-10-04');
+});
+
+test('license plates are cleaned up', () => {
+  assert.equal(L.normalizePlate(' abc-123 '), 'ABC-123');
+  assert.equal(L.normalizePlate('7xyz  <b>9'), '7XYZ B9');
+  assert.equal(L.normalizePlate('ABCDEFGHIJKLMN'), 'ABCDEFGHIJ');
+});
+
 console.log(`\n${passed} passed`);

@@ -317,3 +317,20 @@ tr.picked td { background: var(--hover); }
 .card .head .pick { display: flex; align-items: center; margin-right: 8px; }
 input.fuel-pick, input.fuel-pick-all { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 .card .head .pick + .name { flex: 1; }
+
+/* real 3D model picker (lib/ui-replica.js) */
+.rep-status { min-height: 18px; margin: 8px 0; font-size: 13px; color: var(--dim); }
+.rep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; max-height: 55vh; overflow-y: auto; }
+.rep-card { border: 1px solid var(--line); background: var(--bg); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.rep-card.on { border-color: var(--accent); }
+.rep-card img, .rep-nothumb { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: var(--panel); display: block; }
+.rep-name { font-size: 13px; line-height: 1.3; }
+.rep-meta { font-size: 11px; color: var(--dim); line-height: 1.35; }
+.rep-btns { display: flex; align-items: center; justify-content: space-between; margin-top: auto; }
+.rep-current { margin: 6px 0; }
+.car-credit.model-credit { left: 12px; bottom: 10px; max-width: calc(100% - 330px); }
+
+/* license plate next to the vehicle name */
+.plate-badge { display: inline-block; margin-left: 8px; padding: 0 6px; border: 1px solid var(--line); background: var(--text); color: var(--bg); font-size: 0.75em; letter-spacing: 1px; vertical-align: 2px; border-radius: 3px; }
+.cards.reg { margin-bottom: 12px; }
+.car-photo ~ .car-credit.model-credit { left: 112px; }

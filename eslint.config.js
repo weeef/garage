@@ -1,7 +1,7 @@
 // npm run lint. Catches real mistakes (undefined names, unused code) rather than enforcing style.
 const browser = ['window', 'document', 'localStorage', 'navigator', 'location', 'fetch', 'matchMedia', 'requestAnimationFrame',
   'cancelAnimationFrame', 'performance', 'ResizeObserver', 'IntersectionObserver', 'structuredClone', 'crypto', 'URL', 'URLSearchParams',
-  'AbortController', 'Event', 'File', 'Blob', 'self', 'caches', 'Request', 'Response', 'getComputedStyle'];
+  'AbortController', 'Event', 'File', 'Blob', 'self', 'caches', 'Request', 'Response', 'getComputedStyle', 'TextDecoder', 'DataTransfer', 'DragEvent'];
 const node = ['require', 'module', 'process', '__dirname', 'Buffer', 'global', 'globalThis'];
 const common = ['console', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Proxy'];
 const globals = (names) => Object.fromEntries(names.map((n) => [n, 'readonly']));

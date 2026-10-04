@@ -4,6 +4,8 @@
   const S = window.GarageSync;
   const C = window.GarageCarfax;
   const G3 = window.GarageCar3D;
+  const RG = window.GarageRegistrationUI;
+  const GR = window.GarageReplica;
   const U = window.GarageUpdateBanner;
   const F = window.GarageFuel;
   const TH = window.GarageThemes;
@@ -125,6 +127,7 @@
       for (const f of fields) values[f.name] = form.elements[f.name].value.trim();
       try {
         const err = onSubmit(values);
+        if (err === false) return; // stays open
         if (err) { $('#dlgError').textContent = err; return; }
         dlg.close();
       } catch (ex) {
@@ -252,6 +255,7 @@
     { name: 'body', label: 'Body style', type: 'select', pair: true,
       options: [{ value: '', label: 'From VIN' }, ...G3.BODY_TYPES] },
     { name: 'color', label: 'Paint color', type: 'color', default: G3.DEFAULT_COLOR },
+    ...RG.FIELDS,
     { name: 'odometer', label: 'Odometer', type: 'number', min: 0, required: true, pair: true },
     { name: 'unit', label: 'Unit', type: 'select', options: [{ value: 'mi', label: 'Miles' }, { value: 'km', label: 'Kilometers' }] },
     { name: 'notes', label: 'Notes', type: 'textarea' }
@@ -268,7 +272,7 @@
         const veh = {
           id: uid(), name: v.name, year: v.year ? Number(v.year) : null, make: v.make, model: v.model,
           odometer: odo, unit: v.unit === 'km' ? 'km' : 'mi', vin: L.normalizeVin(v.vin), notes: v.notes,
-          body: v.body, color: v.color, baseModel: keepBase(v.model, $('#dlgForm').dataset.baseModel)
+          body: v.body, color: v.color, baseModel: keepBase(v.model, $('#dlgForm').dataset.baseModel), ...RG.fromForm(v, L)
         };
         data.vehicles.push(veh);
         vehicleId = veh.id;
@@ -318,7 +322,7 @@
         Object.assign(v, {
           name: f.name, year: f.year ? Number(f.year) : null, make: f.make, model: f.model,
           odometer: odo, unit: f.unit === 'km' ? 'km' : 'mi', vin: L.normalizeVin(f.vin), notes: f.notes,
-          body: f.body, color: f.color, baseModel: keepBase(f.model, $('#dlgForm').dataset.baseModel || v.baseModel)
+          body: f.body, color: f.color, baseModel: keepBase(f.model, $('#dlgForm').dataset.baseModel || v.baseModel), ...RG.fromForm(f, L)
         });
         if (!f.body) car.retryVin(v.id); // "From VIN": look it up again
         persist(); render();
@@ -458,6 +462,15 @@
   }
   const badgeLabel = (st) => (st.status === 'unknown' ? 'NO RECORD' : st.status);
 
+  function registrationItemHtml(v) {
+    const r = registration.item(v);
+    return `<button class="due-item ${r.status}" data-action="renewreg">
+      <span class="bar"></span>
+      <span class="mid"><span class="name">Registration (tabs)</span><span class="sub">${esc(r.sub)}</span></span>
+      <span class="right"><span class="badge ${r.status}">${esc(r.label)}</span><span class="sub">${esc(r.when || 'tap to ' + r.action)}</span></span>
+    </button>`;
+  }
+
   function dueItemHtml(st, v) {
     return `<button class="due-item ${st.status}" data-action="logfor" data-name="${esc(st.schedule.name)}">
       <span class="bar"></span>
@@ -471,23 +484,24 @@
   function viewHome(v) {
     const stats = L.vehicleStats(v, data.logs);
     const statuses = L.allStatuses(v, data.schedules, data.logs);
-    const over = statuses.filter((s) => s.status === 'overdue').length;
-    const soon = statuses.filter((s) => s.status === 'soon').length;
+    const reg = registration.item(v);
+    const over = statuses.filter((s) => s.status === 'overdue').length + (reg.status === 'overdue' ? 1 : 0);
+    const soon = statuses.filter((s) => s.status === 'soon').length + (reg.status === 'soon' ? 1 : 0);
     const recent = data.logs
       .filter((l) => l.vehicleId === v.id)
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
       .slice(0, 4);
     const sub = [v.year, v.make, v.model].filter(Boolean).join(' ');
 
-    const summary = !statuses.length ? '' :
+    const summary = !statuses.length && reg.status !== 'overdue' && reg.status !== 'soon' ? '' :
       `<div class="summary ${over ? 'overdue' : soon ? 'soon' : ''}"><span class="dot"></span>
         <span>${over ? `${over} overdue` : ''}${over && soon ? ' · ' : ''}${soon ? `${soon} due soon` : ''}${!over && !soon ? 'Nothing due. All good.' : ''}</span></div>`;
 
     const shown = statuses.slice(0, 5);
     const dueHtml = statuses.length
-      ? `<div class="cards">${shown.map((st) => dueItemHtml(st, v)).join('')}</div>${
+      ? `<div class="cards">${registrationItemHtml(v)}${shown.map((st) => dueItemHtml(st, v)).join('')}</div>${
           statuses.length > shown.length ? `<p class="hint">${statuses.length - shown.length} more on the DUE tab.</p>` : ''}`
-      : `<div class="empty">No schedules yet.<div><button class="btn" data-action="presets">ADD COMMON SCHEDULES</button></div></div>`;
+      : `<div class="cards">${registrationItemHtml(v)}</div><div class="empty">No schedules yet.<div><button class="btn" data-action="presets">ADD COMMON SCHEDULES</button></div></div>`;
 
     const recentHtml = recent.length
       ? `<div class="cards">${recent.map(logCardHtml.bind(null, v, false)).join('')}</div>`
@@ -495,7 +509,7 @@
 
     return `
       <div id="dashUpdate"></div>
-      <h2 class="title">${esc(v.name)}${sub ? `<small>${esc(sub)}</small>` : ''}</h2>
+      <h2 class="title">${esc(v.name)}${v.plate ? ` <span class="plate-badge">${esc(v.plate)}</span>` : ''}${sub ? `<small>${esc(sub)}</small>` : ''}</h2>
       ${car.stageHtml(v)}
       ${fuelCardHtml(v)}
       ${summary}
@@ -574,6 +588,7 @@
       : `<div class="empty">No schedules yet.<div><button class="btn" data-action="presets">ADD COMMON SCHEDULES</button></div></div>`;
     return `<div class="row"><h1><span class="rule"></span>Schedules</h1>
       <button class="btn ghost small" data-action="presets">ADD COMMON SET</button></div>
+      <div class="cards reg">${registrationItemHtml(v)}</div>
       <p class="hint">Matched to log entries by name. Logging "Oil &amp; filter change" resets that schedule.</p>${body}`;
   }
 
@@ -597,6 +612,9 @@
         ${syncCard()}
         <div class="card"><h3>Import records</h3><p>Shop work orders and receipts (Les Schwab, Discount Tire, Jiffy Lube, dealers) or CARFAX history, from a PDF, an email, or a photo of a paper receipt.</p>
           <div class="btns left"><button class="btn ghost" data-action="import">IMPORT RECORDS</button></div></div>
+        <div class="card"><h3>Real car models</h3><p>Show a real 3D model of your car from Sketchfab instead of the generated one: "real model" under the car on the home tab.</p>
+          <div class="btns left"><button class="btn ghost" data-action="replica">CHOOSE A MODEL</button>
+            <button class="btn ghost" data-action="repoff">DISCONNECT</button></div></div>
         <div class="card"><h3>App updates</h3><p>Version ${esc(appVersion || '…')}. The app updates itself when a new version is published; you'll be asked to reload.</p>
           <div class="btns left"><button class="btn ghost" data-action="checkupdate">CHECK FOR UPDATES</button></div></div>
         <div class="card"><h3>Current vehicle</h3><p>Edit details, or delete it with all of its history.</p>
@@ -674,7 +692,10 @@
     redraw: (v) => { if (vehicle() === v && !$('#dlg').open) render(); },
     decodeVin: (vin) => fetchVin(vin),
     findLook: findLookOnline,
-    threeSrc: 'lib/vendor/three.min.js',
+    vendorBase: 'lib/vendor/',
+    R: GR,
+    readReplica: (uid) => repRead(uid),
+    replicaFailed: (v) => replicaMissing(v),
     hints: { spin: 'swipe to spin', paint: 'paint' }
   });
 
@@ -739,6 +760,80 @@
   const PASTE_HINT = "Or paste: an email receipt, a CARFAX service history page, or a paper receipt (point your camera at it and use Live Text on iPhone or Google Lens on Android to copy the text).";
   const ROW = (e, v, isOrder) => `<span class="s">${esc(e.service)}${isOrder ? ' · ' + money(e.cost) : ''}${e.duplicate ? ' <em>already logged</em>' : ''}</span>
         <span class="meta">${isOrder ? '' : esc(e.date) + ' · ' + fmtInt(e.odometer) + ' ' + unit(v)}<small>${esc(e.notes.replace(/^Imported from CARFAX( · )?/, ''))}</small></span>`;
+
+  // ---------- registration and plate (lib/ui-registration.js) ----------
+  const registration = RG.create({ vehicle, persist, render, openForm, toast, L });
+
+  // ---------- real 3D models of the car (lib/replica.js, lib/ui-replica.js) ----------
+  // Sketchfab straight from the page; downloads are kept in Cache Storage (the service worker leaves
+  // that cache alone when it updates the app).
+  const REP_TOKEN = 'garage-log-sketchfab';
+  const REP_CACHE = 'garage-log-models';
+  const repToken = () => { try { return localStorage.getItem(REP_TOKEN) || ''; } catch { return ''; } };
+  const repSetToken = (t) => { try { if (t) localStorage.setItem(REP_TOKEN, t); else localStorage.removeItem(REP_TOKEN); } catch { /* private mode */ } };
+  const OFFLINE = "Couldn't reach Sketchfab. Check your connection.";
+
+  async function repSearch(q) {
+    try {
+      const res = await fetch(GR.searchUrl(String(q || '').slice(0, 120)));
+      if (!res.ok) return { ok: false, error: `Sketchfab returned an error (${res.status}).` };
+      return { ok: true, json: await res.json() };
+    } catch {
+      return { ok: false, error: OFFLINE };
+    }
+  }
+
+  async function repDownload(uid) {
+    if (!GR.validUid(uid)) return { ok: false, error: 'Bad model id.' };
+    if (!('caches' in window)) return { ok: false, error: 'Real models need the installed app (opened over https).' };
+    const cache = await caches.open(REP_CACHE);
+    if (await cache.match('/models/' + uid)) return { ok: true };
+    try {
+      const info = await fetch(GR.downloadInfoUrl(uid), { headers: { Authorization: 'Token ' + repToken() } });
+      if (info.status === 401 || info.status === 403) return { ok: false, code: 'auth', error: "Sketchfab didn't accept the API token." };
+      if (!info.ok) return { ok: false, error: `Sketchfab returned an error (${info.status}).` };
+      const arc = GR.archiveFrom(await info.json());
+      if (!arc) return { ok: false, error: 'Sketchfab has no download for that model.' };
+      const file = await fetch(arc.url);
+      if (!file.ok) return { ok: false, error: `The download failed (${file.status}).` };
+      const blob = await file.blob();
+      await cache.put('/models/' + uid, new Response(blob, { headers: { 'x-kind': arc.kind } }));
+      return { ok: true, size: blob.size };
+    } catch {
+      return { ok: false, error: OFFLINE };
+    }
+  }
+
+  async function repRead(uid) {
+    if (!('caches' in window)) return { ok: false };
+    const res = await (await caches.open(REP_CACHE)).match('/models/' + uid);
+    return res ? { ok: true, kind: res.headers.get('x-kind') || 'glb', data: await res.arrayBuffer() } : { ok: false };
+  }
+
+  async function repPrune(keep) {
+    if (!('caches' in window)) return;
+    const cache = await caches.open(REP_CACHE);
+    for (const req of await cache.keys()) if (!keep.includes(new URL(req.url).pathname.split('/').pop())) await cache.delete(req);
+  }
+
+  const replica = window.GarageReplicaUI.create({
+    data: () => data, vehicle, persist, render, openForm, $, esc, toast, R: GR,
+    hasToken: async () => Boolean(repToken()), setToken: async (t) => repSetToken(t), search: repSearch, download: repDownload, prune: repPrune,
+    tryLoad: (uid) => car.tryLoad(uid)
+  });
+
+  // The vehicle has a real model (picked on another device, say) that isn't downloaded here yet.
+  const replicaWarned = new Set();
+  async function replicaMissing(v) {
+    const uid = v.replica && v.replica.uid;
+    if (!uid || replicaWarned.has(uid)) return;
+    replicaWarned.add(uid);
+    if (await replica.hasToken()) {
+      const res = await replica.download(uid);
+      if (res.ok) { car.refresh(); return; }
+    }
+    toast('REAL MODEL NOT ON THIS DEVICE: TAP "CHANGE MODEL"');
+  }
 
   // ---------- importing records: shop work orders / receipts, or CARFAX history (lib/ui-import.js) ----------
   const { pdfText, importRecords } = window.GarageImportUI.create({
@@ -961,6 +1056,9 @@
 
   const actions = {
     import: importRecords,
+    replica: () => replica.open(),
+    renewreg: () => registration.renew(),
+    repoff: () => replica.setToken('').then(() => toast('SKETCHFAB DISCONNECTED')),
     addfuel: () => fuelForm(null),
     editfuel: (id) => fuelForm(data.fuel.find((f) => f.id === id)),
     delfuel: deleteFuel,

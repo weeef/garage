@@ -1,7 +1,7 @@
 // Offline cache for the app shell.
 // CACHE is set from package.json's version by `npm run sync-version` (runs on every build/release):
 // a new version = a new cache name = phones install the whole new set atomically, then offer a reload.
-const CACHE = 'garage-log-1.10.0';
+const CACHE = 'garage-log-1.11.0';
 const SHELL = [
   './',
   'index.html',
@@ -18,13 +18,18 @@ const SHELL = [
   'lib/carlook.js',
   'lib/fuel.js',
   'lib/logic.js',
+  'lib/replica.js',
   'lib/sync.js',
   'lib/themes.js',
   'lib/ui-car.js',
   'lib/ui-fuel.js',
   'lib/ui-import.js',
+  'lib/ui-registration.js',
+  'lib/ui-replica.js',
   'lib/updatebanner.js',
   'lib/workorder.js',
+  'lib/vendor/fflate.min.js',
+  'lib/vendor/GLTFLoader.js',
   'lib/vendor/pdf.min.js',
   'lib/vendor/pdf.worker.min.js',
   'lib/vendor/three.min.js'
@@ -42,7 +47,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== 'garage-log-models').map((k) => caches.delete(k)))) // keep downloaded car models
       .then(() => self.clients.claim())
   );
 });

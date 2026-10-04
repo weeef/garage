@@ -4,6 +4,8 @@
   const S = window.GarageSync;
   const C = window.GarageCarfax;
   const G3 = window.GarageCar3D;
+  const RG = window.GarageRegistrationUI;
+  const GR = window.GarageReplica;
   const U = window.GarageUpdateBanner;
   const F = window.GarageFuel;
   const TH = window.GarageThemes;
@@ -77,6 +79,7 @@
       }
       try {
         const err = onSubmit(values);
+        if (err === false) return; // stays open
         if (err) { $('#dlgError').textContent = err; return; }
         dlg.close();
       } catch (ex) {
@@ -187,6 +190,7 @@
     { name: 'body', label: 'Body style (3D car)', type: 'select', pair: true,
       options: [{ value: '', label: 'From VIN' }, ...G3.BODY_TYPES] },
     { name: 'color', label: 'Paint color', type: 'color', default: G3.DEFAULT_COLOR },
+    ...RG.FIELDS,
     { name: 'odometer', label: 'Odometer', type: 'number', min: 0, required: true, pair: true },
     { name: 'unit', label: 'Unit', type: 'select', options: [{ value: 'mi', label: 'Miles' }, { value: 'km', label: 'Kilometers' }] },
     { name: 'notes', label: 'Notes', type: 'textarea' }
@@ -203,7 +207,7 @@
         const veh = {
           id: uid(), name: v.name, year: v.year ? Number(v.year) : null, make: v.make, model: v.model,
           odometer: odo, unit: v.unit === 'km' ? 'km' : 'mi', vin: L.normalizeVin(v.vin), notes: v.notes,
-          body: v.body, color: v.color, baseModel: keepBase(v.model, $('#dlgForm').dataset.baseModel)
+          body: v.body, color: v.color, baseModel: keepBase(v.model, $('#dlgForm').dataset.baseModel), ...RG.fromForm(v, L)
         };
         data.vehicles.push(veh);
         vehicleId = veh.id;
@@ -249,7 +253,7 @@
         Object.assign(v, {
           name: f.name, year: f.year ? Number(f.year) : null, make: f.make, model: f.model,
           odometer: odo, unit: f.unit === 'km' ? 'km' : 'mi', vin: L.normalizeVin(f.vin), notes: f.notes,
-          body: f.body, color: f.color, baseModel: keepBase(f.model, $('#dlgForm').dataset.baseModel || v.baseModel)
+          body: f.body, color: f.color, baseModel: keepBase(f.model, $('#dlgForm').dataset.baseModel || v.baseModel), ...RG.fromForm(f, L)
         });
         if (!f.body) car.retryVin(v.id); // "From VIN": look it up again
         persist(); render();
@@ -435,14 +439,25 @@
       : `<div class="empty">Nothing logged yet.<div><button class="btn" data-action="addlog">LOG YOUR FIRST SERVICE</button></div></div>`;
 
     return `<div id="dashUpdate"></div>
-      <div class="row"><h1 class="grow"><span class="rule"></span>${esc(v.name)}${title ? ' — ' + esc(title) : ''}</h1>
+      <div class="row"><h1 class="grow"><span class="rule"></span>${esc(v.name)}${title ? ' — ' + esc(title) : ''}${v.plate ? ` <span class="plate-badge">${esc(v.plate)}</span>` : ''}</h1>
         <button class="btn ghost small" data-action="editvehicle">EDIT VEHICLE</button>
         <button class="btn" data-action="addlog">+ LOG SERVICE</button></div>
       ${car.stageHtml(v)}
       ${fuelCardHtml(v)}
       ${tiles}
-      <div class="section"><h1><span class="rule"></span>What's due</h1>${dueHtml}</div>
+      <div class="section"><h1><span class="rule"></span>What's due</h1>${registrationHtml(v)}${dueHtml}</div>
       <div class="section"><h1><span class="rule"></span>Recent work</h1>${recentHtml}</div>`;
+  }
+
+  function registrationHtml(v) {
+    const r = registration.item(v);
+    return `<div class="due reg"><div class="due-item ${r.status}">
+        <div class="bar"></div>
+        <div><div class="name">Registration (tabs)</div><div class="sub">${esc(r.sub)}</div></div>
+        <div class="right"><span class="badge ${r.status}">${esc(r.label)}</span>
+          <div class="sub">${esc(r.when)}</div>
+          <div class="sub"><a href="#" class="link" data-action="renewreg">${r.action}</a></div></div>
+      </div></div>`;
   }
 
   function viewLog(v) {
@@ -529,6 +544,9 @@
         ${syncCard()}
         <div class="card"><h3>Import records</h3><p>Shop work orders and receipts (Les Schwab, Discount Tire, Jiffy Lube, dealers) or CARFAX history, from a PDF or pasted text. You check everything before it's added.</p>
           <button class="btn ghost" data-action="import">IMPORT RECORDS</button></div>
+        <div class="card"><h3>Real car models</h3><p>Show a real 3D model of your car from Sketchfab instead of the generated one: "real model" under the car on the dashboard.</p>
+          <button class="btn ghost" data-action="replica">CHOOSE A MODEL</button>
+          <button class="btn ghost" data-action="repoff">DISCONNECT SKETCHFAB</button></div>
         <div class="card"><h3>App updates</h3><p>Version ${esc(appVersion || '…')}. Garage Log checks for new versions on its own and asks before installing. Your data is kept.</p>
           <button class="btn ghost" data-action="checkupdate">CHECK FOR UPDATES</button></div>
         <div class="card"><h3>Current vehicle</h3><p>Edit details, or remove the vehicle and all of its history.</p>
@@ -578,7 +596,10 @@
     redraw: (v) => { if (vehicle() === v) render(); },
     decodeVin: async (vin) => { try { return await window.garage.decodeVin(vin); } catch { return null; } },
     findLook: async (spec) => { try { return await window.garage.findLook(spec); } catch { return { ok: false }; } },
-    threeSrc: '../lib/vendor/three.min.js',
+    vendorBase: '../lib/vendor/',
+    R: GR,
+    readReplica: (uid) => window.garage.replicaRead(uid),
+    replicaFailed: (v) => replicaMissing(v),
     hints: { spin: 'drag to spin', paint: 'paint & body' }
   });
 
@@ -648,6 +669,30 @@
   const PASTE_HINT = "Or paste: an email receipt, a CARFAX service history page (Ctrl+A, Ctrl+C), or text copied from a photo of a paper receipt.";
   const ROW = (e, v, isOrder) => `<span class="d">${esc(e.date || '')}</span><span class="o">${isOrder ? money(e.cost) : fmtInt(e.odometer) + ' ' + unit(v)}</span>
         <span class="s">${esc(e.service)}${e.duplicate ? ' <em>already logged</em>' : ''}<small>${esc(e.notes.replace(/^Imported from CARFAX( · )?/, ''))}</small></span>`;
+
+  // ---------- registration and plate (lib/ui-registration.js) ----------
+  const registration = RG.create({ vehicle, persist, render, openForm, toast, L });
+
+  // ---------- real 3D models of the car (lib/replica.js, lib/ui-replica.js) ----------
+  const replica = window.GarageReplicaUI.create({
+    data: () => data, vehicle, persist, render, openForm, $, esc, toast, R: GR,
+    hasToken: () => window.garage.replicaHasToken(), setToken: (t) => window.garage.replicaSetToken(t),
+    search: (q) => window.garage.replicaSearch(q), download: (uid) => window.garage.replicaDownload(uid), prune: (keep) => window.garage.replicaPrune(keep),
+    tryLoad: (uid) => car.tryLoad(uid)
+  });
+
+  // The vehicle has a real model (picked on another device, say) that isn't downloaded here yet.
+  const replicaWarned = new Set();
+  async function replicaMissing(v) {
+    const uid = v.replica && v.replica.uid;
+    if (!uid || replicaWarned.has(uid)) return;
+    replicaWarned.add(uid);
+    if (await replica.hasToken()) {
+      const res = await replica.download(uid);
+      if (res.ok) { car.refresh(); return; }
+    }
+    toast('REAL MODEL NOT ON THIS DEVICE: TAP "CHANGE MODEL"');
+  }
 
   // ---------- importing records: shop work orders / receipts, or CARFAX history (lib/ui-import.js) ----------
   const { pdfText, importRecords } = window.GarageImportUI.create({
@@ -804,6 +849,9 @@
 
   const actions = {
     import: importRecords,
+    replica: () => replica.open(),
+    renewreg: () => registration.renew(),
+    repoff: () => replica.setToken('').then(() => toast('SKETCHFAB DISCONNECTED')),
     addfuel: () => fuelForm(null),
     editfuel: (id) => fuelForm(data.fuel.find((f) => f.id === id)),
     delfuel: deleteFuel,

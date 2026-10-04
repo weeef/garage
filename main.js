@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { createUpdater } = require('./lib/updater');
 const { findLook } = require('./lib/carlook');
+const R = require('./lib/replica');
 
 const dataFile = () => path.join(app.getPath('userData'), 'garage-log.json');
 const EMPTY = { vehicles: [], logs: [], schedules: [] };
@@ -126,6 +127,97 @@ ipcMain.handle('look:find', async (_e, spec) => {
   } catch {
     return { ok: false }; // offline or Wikipedia unreachable: try again another time
   }
+});
+
+// ---------- real 3D models of the car (Sketchfab, lib/replica.js) ----------
+// Downloads are kept in userData/models. The user's Sketchfab API token is stored like the sync token
+// (encrypted by Windows) and never handed to the page.
+const MAX_MODEL = 300 * 1048576;
+const modelDir = () => path.join(app.getPath('userData'), 'models');
+const sketchfabFile = () => path.join(app.getPath('userData'), 'sketchfab.json');
+const SKETCHFAB_OFFLINE = "Couldn't reach Sketchfab. Check your connection.";
+
+function sketchfabToken() {
+  try {
+    const c = JSON.parse(fs.readFileSync(sketchfabFile(), 'utf8'));
+    if (c.tokenEnc && safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(Buffer.from(c.tokenEnc, 'base64'));
+    return c.token || '';
+  } catch {
+    return '';
+  }
+}
+
+async function timedFetch(url, opts = {}, ms = 20000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const modelFile = (uid) => ['glb', 'zip'].map((kind) => ({ kind, file: path.join(modelDir(), `${uid}.${kind}`) })).find((m) => fs.existsSync(m.file));
+
+ipcMain.handle('replica:hasToken', () => Boolean(sketchfabToken()));
+
+ipcMain.handle('replica:setToken', (_e, token) => {
+  const t = String(token || '').trim();
+  const file = sketchfabFile();
+  if (!t) {
+    try { fs.unlinkSync(file); } catch { /* not connected */ }
+    return true;
+  }
+  const out = safeStorage.isEncryptionAvailable() ? { tokenEnc: safeStorage.encryptString(t).toString('base64') } : { token: t };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(out), 'utf8');
+  return true;
+});
+
+ipcMain.handle('replica:search', async (_e, query) => {
+  try {
+    const res = await timedFetch(R.searchUrl(String(query || '').slice(0, 120)));
+    if (!res.ok) return { ok: false, error: `Sketchfab returned an error (${res.status}).` };
+    return { ok: true, json: await res.json() };
+  } catch {
+    return { ok: false, error: SKETCHFAB_OFFLINE };
+  }
+});
+
+ipcMain.handle('replica:download', async (_e, uid) => {
+  if (!R.validUid(uid)) return { ok: false, error: 'Bad model id.' };
+  if (modelFile(uid)) return { ok: true };
+  const token = sketchfabToken();
+  if (!token) return { ok: false, code: 'auth', error: 'Connect Sketchfab first.' };
+  try {
+    const info = await timedFetch(R.downloadInfoUrl(uid), { headers: { Authorization: `Token ${token}` } });
+    if (info.status === 401 || info.status === 403) return { ok: false, code: 'auth', error: "Sketchfab didn't accept the API token." };
+    if (!info.ok) return { ok: false, error: `Sketchfab returned an error (${info.status}).` };
+    const arc = R.archiveFrom(await info.json());
+    if (!arc) return { ok: false, error: 'Sketchfab has no download for that model.' };
+    if (arc.size > MAX_MODEL) return { ok: false, error: `That model is too big to use (${Math.round(arc.size / 1048576)} MB).` };
+    const res = await timedFetch(arc.url, {}, 10 * 60 * 1000);
+    if (!res.ok) return { ok: false, error: `The download failed (${res.status}).` };
+    const buf = Buffer.from(await res.arrayBuffer());
+    fs.mkdirSync(modelDir(), { recursive: true });
+    fs.writeFileSync(path.join(modelDir(), `${uid}.${arc.kind}`), buf);
+    return { ok: true, size: buf.length };
+  } catch (e) {
+    return { ok: false, error: e && e.name === 'AbortError' ? 'The download timed out.' : SKETCHFAB_OFFLINE };
+  }
+});
+
+ipcMain.handle('replica:read', (_e, uid) => {
+  const m = R.validUid(uid) && modelFile(uid);
+  return m ? { ok: true, kind: m.kind, data: fs.readFileSync(m.file) } : { ok: false };
+});
+
+ipcMain.handle('replica:prune', (_e, keep) => {
+  const wanted = new Set((Array.isArray(keep) ? keep : []).filter(R.validUid));
+  try {
+    for (const f of fs.readdirSync(modelDir())) if (!wanted.has(f.replace(/\.(glb|zip)$/, ''))) fs.unlinkSync(path.join(modelDir(), f));
+  } catch { /* no downloads yet */ }
+  return true;
 });
 
 // ---------- phone sync settings ----------
