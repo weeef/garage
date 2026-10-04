@@ -19,7 +19,8 @@ if (next === sw && !sw.includes(`garage-log-${version}`)) {
 fs.writeFileSync(swPath, next);
 
 fs.mkdirSync(path.join(root, 'mobile', 'vendor'), { recursive: true });
-for (const f of ['logic.js', 'sync.js', 'carfax.js', 'car3d.js', 'vendor/three.min.js', 'vendor/three.LICENSE.txt']) {
+for (const f of ['logic.js', 'sync.js', 'carfax.js', 'workorder.js', 'car3d.js', 'vendor/three.min.js', 'vendor/three.LICENSE.txt',
+  'vendor/pdf.min.js', 'vendor/pdf.worker.min.js', 'vendor/pdfjs.LICENSE.txt']) {
   fs.copyFileSync(path.join(root, 'lib', f), path.join(root, 'mobile', f));
 }
 console.log(`Synced version ${version} (mobile/version.json, mobile/sw.js, shared lib files)`);

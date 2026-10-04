@@ -30,9 +30,9 @@ Typing or pasting a VIN when adding a vehicle fills in the year, make and model 
 
 Backups still work too: both apps use the same JSON format. **Export backup** in one, **Import backup** in the other (this replaces everything in the app you import into).
 
-## Importing from CARFAX
+## Importing records
 
-**Service log > CARFAX** (or **Data > Import from CARFAX**). Open the vehicle's service history on carfax.com or a CARFAX report, select all the text, copy it and paste it in. The app finds the dated records and maps the work onto your schedule names (e.g. "Oil and filter changed" becomes "Oil & filter change"), then shows a preview so you can choose what to import. Entries already in the log are left unticked. The parser is `carfax.js` (a copy of `../lib/carfax.js`).
+**Service log > Import** (or **Data > Import records**) takes a shop work order or receipt (open the PDF, paste an email, or copy the text from a photo of a paper receipt with Live Text / Google Lens) or CARFAX history. Work orders are read by `workorder.js` (a copy of `../lib/workorder.js`): date, mileage, shop, line items, with fees and tax folded in so the costs match the invoice. For CARFAX: Open the vehicle's service history on carfax.com or a CARFAX report, select all the text, copy it and paste it in. The app finds the dated records and maps the work onto your schedule names (e.g. "Oil and filter changed" becomes "Oil & filter change"), then shows a preview so you can choose what to import. Entries already in the log are left unticked. The parser is `carfax.js` (a copy of `../lib/carfax.js`).
 
 ## Hosting
 

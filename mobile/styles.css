@@ -222,3 +222,8 @@ menu .btn { flex: 1; }
 input[type=color] { height: 44px; padding: 2px 4px; }
 
 .car-hint a { color: var(--accent); }
+
+/* import dialog */
+.import-pdf { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+.import-pdf .dim { font-size: 12px; }
+

@@ -185,3 +185,9 @@ a.link { color: var(--accent); }
 .car-hint a { pointer-events: auto; }
 
 input[type=color] { height: 34px; padding: 2px 4px; cursor: pointer; }
+
+/* import dialog */
+.import-pdf { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+.import-pdf .dim { font-size: 12px; }
+
+.cfx-row input { accent-color: var(--accent); }

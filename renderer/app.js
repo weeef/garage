@@ -4,6 +4,7 @@
   const S = window.GarageSync;
   const C = window.GarageCarfax;
   const G3 = window.GarageCar3D;
+  const W = window.GarageWorkOrder;
   const $ = (sel, root = document) => root.querySelector(sel);
 
   let data = { vehicles: [], logs: [], schedules: [] };
@@ -452,7 +453,7 @@
           .join('')}</tbody></table>`
       : `<div class="empty">No service history yet.</div>`;
     return `<div class="row"><h1 class="grow"><span class="rule"></span>Service log · ${esc(v.name)}</h1>
-      <button class="btn ghost" data-action="carfax">IMPORT CARFAX</button>
+      <button class="btn ghost" data-action="import">IMPORT RECORDS</button>
       <button class="btn ghost" data-action="csv">EXPORT CSV</button>
       <button class="btn" data-action="addlog">+ LOG SERVICE</button></div>${body}`;
   }
@@ -485,8 +486,8 @@
         <div class="card"><h3>Restore</h3><p>Replace all current data with a backup file. This overwrites what is here now.</p>
           <button class="btn ghost" data-action="restore">IMPORT BACKUP</button></div>
         ${syncCard()}
-        <div class="card"><h3>Import from CARFAX</h3><p>Pull this vehicle's service history in from CARFAX by copying and pasting it. You pick what gets added.</p>
-          <button class="btn ghost" data-action="carfax">IMPORT CARFAX HISTORY</button></div>
+        <div class="card"><h3>Import records</h3><p>Shop work orders and receipts (Les Schwab, Discount Tire, Jiffy Lube, dealers) or CARFAX history, from a PDF or pasted text. You check everything before it's added.</p>
+          <button class="btn ghost" data-action="import">IMPORT RECORDS</button></div>
         <div class="card"><h3>App updates</h3><p>Version ${esc(appVersion || '…')}. Garage Log checks for new versions on its own and asks before installing. Your data is kept.</p>
           <button class="btn ghost" data-action="checkupdate">CHECK FOR UPDATES</button></div>
         <div class="card"><h3>Current vehicle</h3><p>Edit details, or remove the vehicle and all of its history.</p>
@@ -620,49 +621,134 @@
     if (res) toast('CSV SAVED');
   }
 
-  // ---------- CARFAX import ----------
-  function importCarfax() {
+  const PDF_BASE = '../lib/vendor/';
+  const PASTE_HINT = "Or paste: an email receipt, a CARFAX service history page (Ctrl+A, Ctrl+C), or text copied from a photo of a paper receipt.";
+  const ROW = (e, v, isOrder) => `<span class="d">${esc(e.date || '')}</span><span class="o">${isOrder ? money(e.cost) : fmtInt(e.odometer) + ' ' + unit(v)}</span>
+        <span class="s">${esc(e.service)}${e.duplicate ? ' <em>already logged</em>' : ''}<small>${esc(e.notes.replace(/^Imported from CARFAX( · )?/, ''))}</small></span>`;
+
+  // ---------- importing records: shop work orders / receipts, or CARFAX history ----------
+  let pdfReady = null;
+  function loadPdfJs() {
+    // Loaded on first use only (it's large).
+    if (!pdfReady) {
+      pdfReady = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = PDF_BASE + 'pdf.min.js';
+        s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_BASE + 'pdf.worker.min.js'; resolve(window.pdfjsLib); };
+        s.onerror = () => { pdfReady = null; reject(new Error('Could not load the PDF reader.')); };
+        document.head.appendChild(s);
+      });
+    }
+    return pdfReady;
+  }
+
+  async function pdfText(file) {
+    const lib = await loadPdfJs();
+    const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
+    const pages = [];
+    for (let i = 1; i <= Math.min(doc.numPages, 20); i++) {
+      const page = await doc.getPage(i);
+      pages.push(W.linesFromPdfItems((await page.getTextContent()).items));
+    }
+    return pages.join('\n');
+  }
+
+  function importRecords() {
     const v = vehicle();
     if (!v) return;
     openForm({
-      title: `Import CARFAX history · ${v.name}`,
-      fields: [{ name: 'text', label: 'Paste here', type: 'textarea', required: true }],
+      title: `Import records · ${v.name}`,
+      fields: [{ name: 'text', label: 'Or paste the text', type: 'textarea' }],
       okLabel: 'READ IT',
-      onSubmit: (f) => {
-        const entries = C.toEntries(C.parseCarfax(f.text), v, data.logs);
-        if (!entries.length) return 'No service records found. Copy the whole CARFAX page (Ctrl+A, then Ctrl+C) and paste it here.';
-        setTimeout(() => previewCarfax(v, entries), 50);
-      }
+      onSubmit: (f) => (f.text ? readRecords(v, f.text) : 'Paste some text, or open a PDF.')
     });
-    $('#f_text').rows = 10;
-    $('#dlgFields').insertAdjacentHTML('afterbegin', `<p class="hint">Sign in at carfax.com (CARFAX Car Care) and open this vehicle's
-      <b>Service History</b>, or open a CARFAX report. Press <b>Ctrl+A</b> to select the page, <b>Ctrl+C</b> to copy, then paste below
-      with <b>Ctrl+V</b>. You'll see what was found before anything is saved.</p>`);
+    $('#f_text').rows = 7;
+    $('#dlgFields').insertAdjacentHTML('afterbegin', `<p class="hint">Works with <b>shop work orders and receipts</b>
+      (Les Schwab, Discount Tire, Jiffy Lube, dealers and others) and <b>CARFAX</b> service history.</p>
+      <div class="import-pdf"><button type="button" class="btn" id="pdfBtn">OPEN A PDF</button>
+        <span class="dim">the invoice PDF from the shop's email or website</span>
+        <input type="file" id="pdfFile" accept="application/pdf,.pdf" hidden></div>
+      <p class="hint">${PASTE_HINT}</p>`);
+    const btn = $('#pdfBtn');
+    const input = $('#pdfFile');
+    btn.onclick = () => { input.value = ''; input.click(); };
+    input.onchange = async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const err = $('#dlgError');
+      btn.disabled = true;
+      btn.textContent = 'READING…';
+      err.textContent = '';
+      try {
+        const text = await pdfText(file);
+        if (text.replace(/\s/g, '').length < 20) {
+          err.textContent = "That PDF has no text in it (it's a scanned picture). Copy the text with your phone's camera (Live Text / Google Lens) and paste it instead.";
+          return;
+        }
+        $('#f_text').value = text;
+        const problem = readRecords(v, text);
+        if (problem) err.textContent = problem;
+        else $('#dlg').close();
+      } catch (e) {
+        err.textContent = 'Could not read that PDF' + (e && e.message ? ': ' + e.message : '.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'OPEN A PDF';
+      }
+    };
   }
 
-  function previewCarfax(v, entries) {
+  // Works out what the text is and opens the preview. Returns an error message, or nothing.
+  function readRecords(v, text) {
+    if (!W.looksLikeCarfax(text)) {
+      const order = W.parseWorkOrder(text);
+      const entries = W.toEntries(order, v, data.logs);
+      if (entries.length) { setTimeout(() => previewImport(v, entries, order), 80); return; }
+    }
+    const entries = C.toEntries(C.parseCarfax(text), v, data.logs);
+    if (entries.length) { setTimeout(() => previewImport(v, entries, null), 80); return; }
+    return "Couldn't find any service work in that. Make sure it includes the lines describing the work (e.g. \"Rotate & balance\", \"Oil change\").";
+  }
+
+  // order: the parsed work order (one visit, date/mileage editable), or null for CARFAX (many visits).
+  function previewImport(v, entries, order) {
     const dupes = entries.filter((e) => e.duplicate).length;
+    const total = entries.reduce((s, e) => s + (e.cost || 0), 0);
     openForm({
-      title: 'Pick what to import',
-      fields: [],
+      title: order ? `${order.shop || 'Work order'} · check and import` : 'CARFAX · pick what to import',
+      fields: order ? [
+        { name: 'date', label: 'Date', type: 'date', required: true, pair: true },
+        { name: 'odometer', label: `Odometer (${unit(v)})`, type: 'number', min: 0 }
+      ] : [],
+      initial: order ? { date: order.date || '', odometer: order.odometer ?? '' } : {},
       okLabel: 'IMPORT',
-      onSubmit: () => {
+      onSubmit: (f) => {
         const picked = [...document.querySelectorAll('#dlgFields input[data-i]:checked')].map((el) => entries[Number(el.dataset.i)]);
         if (!picked.length) return 'Tick at least one entry.';
-        for (const { duplicate, ...entry } of picked) data.logs.push({ id: uid(), ...entry });
+        let date = null;
+        let odo = null;
+        if (order) {
+          if (!L.parseDate(f.date)) return 'Pick the date of the visit.';
+          date = f.date;
+          odo = f.odometer === '' ? null : Number(f.odometer);
+          if (odo != null && !(odo >= 0)) return 'Odometer must be a number.';
+        }
+        for (const { duplicate, ...entry } of picked) {
+          data.logs.push({ id: uid(), ...entry, ...(order ? { date, odometer: odo } : {}) });
+        }
         v.odometer = L.highestOdometer(v, data.logs);
         persist(); render();
         toast(`${picked.length} ${picked.length === 1 ? 'ENTRY' : 'ENTRIES'} IMPORTED`);
       }
     });
-    $('#dlgFields').innerHTML = `<p class="hint">Found ${entries.length} service ${entries.length === 1 ? 'entry' : 'entries'}${
-      dupes ? `, ${dupes} already in your log (unticked)` : ''}. Untick anything you don't want; you can edit entries later in the service log.
-      Costs aren't in CARFAX, so they import as $0.</p>
+    const summary = order
+      ? `Found ${entries.length} service ${entries.length === 1 ? 'item' : 'items'}${order.total != null ? `, invoice total ${money(order.total)}` : ''}.
+         Fees and tax are added to the biggest item so your spending matches the invoice.${order.date ? '' : ' <b>No date found; set it above.</b>'}`
+      : `Found ${entries.length} service ${entries.length === 1 ? 'entry' : 'entries'}. Costs aren't in CARFAX, so they import as $0.`;
+    $('#dlgFields').insertAdjacentHTML('beforeend', `<p class="hint">${summary}${dupes ? ` ${dupes} already in your log (unticked).` : ''}</p>
       <div class="cfx-list">${entries.map((e, i) => `<label class="cfx-row${e.duplicate ? ' dup' : ''}">
         <input type="checkbox" data-i="${i}" ${e.duplicate ? '' : 'checked'}>
-        <span class="d">${esc(e.date)}</span><span class="o">${fmtInt(e.odometer)} ${unit(v)}</span>
-        <span class="s">${esc(e.service)}${e.duplicate ? ' <em>already logged</em>' : ''}
-          <small>${esc(e.notes.replace(/^Imported from CARFAX( · )?/, ''))}</small></span></label>`).join('')}</div>`;
+        ${ROW(e, v, Boolean(order))}</label>`).join('')}</div>${order && entries.length > 1 ? `<p class="hint">Items total: ${money(total)}</p>` : ''}`);
   }
 
   // ---------- phone sync (private GitHub Gist, see lib/sync.js) ----------
@@ -748,7 +834,7 @@
   }
 
   const actions = {
-    carfax: importCarfax,
+    import: importRecords,
     syncon: connectSync,
     syncnow: () => runSync(true),
     syncoff: disconnectSync,

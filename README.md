@@ -31,7 +31,7 @@ Run the tests: `npm test`
 - **VIN lookup**: type or paste a VIN when adding a vehicle and the year, make and model fill in automatically (free NHTSA database, needs internet; you can always fill details by hand). A VIN whose check digit doesn't match gets a warning, in case of a typo.
 - **Dashboard**: odometer, total spend, last 12 months, cost per mile, what's due, recent work.
 - **3D car**: the dashboard shows a 3D model you can drag to spin, shaped by the body style from the VIN decode (sedan, coupe, hatchback, wagon, SUV, pickup, van, convertible, motorcycle) and painted the color set in Edit vehicle. It's a styled model of the body type, not the exact make and model. Built with three.js (`lib/vendor/`, MIT license), so it works offline.
-- **CARFAX import**: Service log > Import CARFAX. Copy your vehicle's service history from carfax.com (Ctrl+A, Ctrl+C) and paste it in; you get a preview of the records found, mapped onto your schedule names, and pick what to add.
+- **Import records**: Service log > Import records. Open a shop's invoice PDF (Les Schwab, Discount Tire, Jiffy Lube, dealers...) or paste an email receipt, text copied from a photo of a paper receipt, or a CARFAX service history page. The app reads the date, mileage, shop and line items, maps the work onto your schedule names, folds fees and tax into the cost so totals match the invoice, and shows a preview before anything is added. PDFs are read with pdf.js (`lib/vendor/`, Apache-2.0).
 - **Phone sync**: Data > Phone sync. Connect the desktop and phone apps with the same GitHub token (gist permission only); they sync through a private gist on your account and merge changes from both sides.
 - **Data tab**: JSON backup and restore, app version and Check for updates.
 
@@ -45,8 +45,9 @@ preload.js       Safe bridge to the renderer
 lib/logic.js     Due-date and stats logic (pure, tested)
 lib/sync.js      Phone/PC sync: change tracking, merging, GitHub Gist client (shared with mobile)
 lib/carfax.js    Reads service records from pasted CARFAX text (shared with mobile)
+lib/workorder.js Reads shop work orders / invoices / receipts (shared with mobile)
 lib/car3d.js     3D car model and viewer, body style from the VIN (shared with mobile)
-lib/vendor/      three.js r159 (bundled, so no internet is needed)
+lib/vendor/      three.js r159 and pdf.js 3.11 (bundled, so no internet is needed)
 mobile/          Phone version (installable web app), served from GitHub Pages
 renderer/        UI (index.html, styles.css, app.js)
 test/            Logic tests
