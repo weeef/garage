@@ -564,7 +564,7 @@
           <div class="meta">${y.fills} fill-ups · ${fmtVol(y.volume)} ${volAbbr(v)}</div></div>`).join('')}</div>` : '';
     const body = fills.length
       ? `<div class="cards">${fills.map((f) => `<div class="card">
-          <div class="head"><span class="name">${esc(f.station || 'Fill-up')}${f.grade ? ' · ' + esc(gradeLabel(f.grade)) : ''}</span><span class="amt">${money(f.total)}</span></div>
+          <div class="head"><label class="pick"><input type="checkbox" class="fuel-pick" data-id="${f.id}"${fuelPicked.has(f.id) ? ' checked' : ''} aria-label="Select"></label><span class="name">${esc(f.station || 'Fill-up')}${f.grade ? ' · ' + esc(gradeLabel(f.grade)) : ''}</span><span class="amt">${money(f.total)}</span></div>
           <div class="meta">${esc(f.date)}${f.odometer ? ` · ${fmtInt(f.odometer)} ${unit(v)}` : ''} · ${fmtVol(f.volume)} ${volAbbr(v)} @ ${fmtPrice(f.price)}${f.full === false ? ' · partial' : ''}</div>
           ${f.notes ? `<div class="notes">${esc(f.notes)}</div>` : ''}
           <div class="btns"><button class="btn ghost small" data-action="editfuel" data-id="${f.id}">EDIT</button>
@@ -573,7 +573,7 @@
           <div><button class="btn" data-action="importfuel">IMPORT RECEIPTS</button></div></div>`;
     return `<div class="row"><h1><span class="rule"></span>Fuel · ${fills.length}</h1>
       <button class="btn ghost small" data-action="importfuel">IMPORT</button></div>${tiles}${years ? `<h1 class="sub"><span class="rule"></span>By year</h1>${years}` : ''}
-      <h1 class="sub"><span class="rule"></span>Fill-ups</h1>${body}`;
+      <h1 class="sub"><span class="rule"></span>Fill-ups</h1>${fills.length ? fuelPickBar(fills) : ''}${body}`;
   }
 
   function viewDue(v) {
@@ -649,6 +649,8 @@
       fab.hidden = true;
       return;
     }
+    const here = view + '|' + v.id;
+    const keepScroll = main.dataset.here === here ? main.scrollTop : 0; // same view redrawn: stay put
     main.innerHTML =
       view === 'log' ? viewLog(v) :
       view === 'due' ? viewDue(v) :
@@ -660,6 +662,8 @@
     fab.textContent = view === 'due' ? '+ SCHEDULE' : view === 'fuel' ? '+ FILL-UP' : '+ LOG';
     mountCar(v);
     TH.paintSwatches(main);
+    main.dataset.here = here;
+    main.scrollTop = keepScroll;
     renderUpdateBar();
     savePrefs();
   }
@@ -1136,8 +1140,50 @@
     if (!f) return;
     confirmDialog('Delete fill-up?', `Remove the ${money(f.total)} fill-up from ${f.date}?`, 'DELETE', () => {
       data.fuel = data.fuel.filter((x) => x.id !== id);
+      fuelPicked.delete(id);
       persist(); render();
+      toast('FILL-UP DELETED');
     });
+  }
+
+  // Picking fill-ups to delete together: checkboxes on the Fuel tab, select all, delete selected.
+  const fuelPicked = new Set();
+
+  function fuelPickBar(fills) {
+    const n = fills.filter((f) => fuelPicked.has(f.id)).length;
+    const all = n === fills.length;
+    return `<div class="fuel-pickbar"><label><input type="checkbox" class="fuel-pick-all"${all ? ' checked' : ''}> Select all ${fills.length}</label>
+      <button type="button" class="btn danger small" data-action="delfuelsel"${n ? '' : ' disabled'}>DELETE SELECTED${n ? ` (${n})` : ''}</button></div>`;
+  }
+
+  document.addEventListener('change', (e) => {
+    const el = e.target;
+    const v = vehicle();
+    if (!v || !el.classList) return;
+    if (el.classList.contains('fuel-pick')) {
+      if (el.checked) fuelPicked.add(el.dataset.id); else fuelPicked.delete(el.dataset.id);
+      render();
+    } else if (el.classList.contains('fuel-pick-all')) {
+      for (const f of fuelFor(v)) if (el.checked) fuelPicked.add(f.id); else fuelPicked.delete(f.id);
+      render();
+    }
+  });
+
+  function deleteSelectedFuel() {
+    const v = vehicle();
+    if (!v) return;
+    const picked = fuelFor(v).filter((f) => fuelPicked.has(f.id));
+    if (!picked.length) return;
+    const sum = picked.reduce((s, f) => s + (Number(f.total) || 0), 0);
+    confirmDialog(`Delete ${picked.length} fill-up${picked.length === 1 ? '' : 's'}?`,
+      `${money(sum)} in all${picked.length === fuelFor(v).length ? ' (every fill-up for this vehicle)' : ''}. This can't be undone, so export a backup first if unsure.`,
+      `DELETE ${picked.length}`, () => {
+        const ids = new Set(picked.map((f) => f.id));
+        data.fuel = data.fuel.filter((f) => !ids.has(f.id));
+        ids.forEach((id) => fuelPicked.delete(id));
+        persist(); render();
+        toast(`${ids.size} FILL-UP${ids.size === 1 ? '' : 'S'} DELETED`);
+      });
   }
 
   function importFuel() {
@@ -1272,6 +1318,7 @@
     addfuel: () => fuelForm(null),
     editfuel: (id) => fuelForm(data.fuel.find((f) => f.id === id)),
     delfuel: deleteFuel,
+    delfuelsel: deleteSelectedFuel,
     importfuel: importFuel,
     gofuel: () => { view = 'fuel'; render(); },
     theme: (id) => setTheme({ id }),
