@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: https://upload.wikimedia.org https://thumb.wikimedia.org https://media.sketchfab.com; style-src 'self'; script-src 'self'; connect-src 'self' blob: https://vpic.nhtsa.dot.gov https://en.wikipedia.org https://api.sketchfab.com https://*.sketchfab.com https://*.amazonaws.com https://api.github.com https://gist.githubusercontent.com">
+  <meta name="theme-color" content="#0e0e0c">
+  <meta name="color-scheme" content="dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Garage Log">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <title>Garage Log</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="lib/themes.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="mark">▞</span> GARAGE<b>LOG</b></div>
+    <div class="vehicle-pick">
+      <select id="vehicleSelect" aria-label="Vehicle"></select>
+      <button id="addVehicleBtn" class="btn ghost" aria-label="Add a vehicle">+</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+  <div id="updateBar" class="update-bar" hidden></div>
+  <main id="main"></main>
+
+  <button id="fab" class="fab" hidden></button>
+
+  <nav id="nav" aria-label="Sections">
+    <button data-view="home" class="active"><i>◧</i>HOME</button>
+    <button data-view="log"><i>≡</i>LOG</button>
+    <button data-view="due"><i>◔</i>DUE</button>
+    <button data-view="fuel"><i>◍</i>FUEL</button>
+    <button data-view="data"><i>⇅</i>DATA</button>
+  </nav>
+
+  <dialog id="dlg">
+    <form method="dialog" id="dlgForm" autocomplete="off">
+      <h2 id="dlgTitle"></h2>
+      <div id="dlgFields"></div>
+      <div id="dlgError" class="error" role="alert"></div>
+      <menu>
+        <button type="button" id="dlgCancel" class="btn ghost">CANCEL</button>
+        <button type="submit" id="dlgOk" class="btn">SAVE</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <input type="file" id="importFile" accept="application/json,.json" hidden>
+  <div id="toast" role="status"></div>
+
+  <script src="lib/logic.js"></script>
+  <script src="lib/sync.js"></script>
+  <script src="lib/carfax.js"></script>
+  <script src="lib/workorder.js"></script>
+  <script src="lib/fuel.js"></script>
+  <script src="lib/updatebanner.js"></script>
+  <script src="lib/plates.js"></script>
+  <script src="lib/car3d.js"></script>
+  <script src="lib/carlook.js"></script>
+  <script src="lib/ui-registration.js"></script>
+  <script src="lib/replica.js"></script>
+  <script src="lib/ui-replica.js"></script>
+  <script src="lib/ui-receipts.js"></script>
+  <script src="lib/ui-import.js"></script>
+  <script src="lib/ui-car.js"></script>
+  <script src="lib/ui-fuel.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
