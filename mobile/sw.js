@@ -1,9 +1,9 @@
 // Offline cache for the app shell.
 // CACHE is set from package.json's version by `npm run sync-version` (runs on every build/release):
 // a new version = a new cache name = phones install the whole new set atomically, then offer a reload.
-const CACHE = 'garage-log-1.3.0';
+const CACHE = 'garage-log-1.4.0';
 const SHELL = [
-  './', 'index.html', 'styles.css', 'app.js', 'logic.js', 'sync.js', 'carfax.js', 'version.json', 'manifest.webmanifest',
+  './', 'index.html', 'styles.css', 'app.js', 'logic.js', 'sync.js', 'carfax.js', 'car3d.js', 'vendor/three.min.js', 'version.json', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'
 ];
 

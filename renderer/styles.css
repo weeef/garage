@@ -174,3 +174,14 @@ a.link { color: var(--accent); }
 .cfx-row em { color: var(--soon); font-style: normal; font-size: 11px; }
 .cfx-row.dup .s { color: var(--dim); }
 .sync-err { color: var(--over); }
+
+/* 3D car */
+.car-stage { position: relative; height: 250px; margin-bottom: 14px; border: 1px solid var(--line); background: radial-gradient(ellipse at 50% 78%, #2a2924 0%, var(--panel) 62%); overflow: hidden; }
+.car3d-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: pan-y; }
+.car3d-canvas:active { cursor: grabbing; }
+.car-tag, .car-hint { position: absolute; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); pointer-events: none; }
+.car-tag { left: 12px; top: 10px; color: var(--accent); }
+.car-hint { right: 12px; bottom: 10px; }
+.car-hint a { pointer-events: auto; }
+
+input[type=color] { height: 34px; padding: 2px 4px; cursor: pointer; }

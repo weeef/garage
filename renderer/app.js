@@ -3,6 +3,7 @@
   const L = window.GarageLogic;
   const S = window.GarageSync;
   const C = window.GarageCarfax;
+  const G3 = window.GarageCar3D;
   const $ = (sel, root = document) => root.querySelector(sel);
 
   let data = { vehicles: [], logs: [], schedules: [] };
@@ -143,6 +144,7 @@
       if (!d.ok) { setStatus('No match for that VIN. Check for typos, or fill in the details by hand.', 'err'); return; }
       const set = (name, v) => { const el = form.elements[name]; if (el && v != null && v !== '') el.value = v; };
       set('year', d.year); set('make', d.make); set('model', d.model);
+      set('body', G3.bodyFromNhtsa(d.bodyClass, d.doors));
       if (form.elements.name && !form.elements.name.value.trim()) {
         set('name', [d.year, d.make, d.model].filter(Boolean).join(' '));
       }
@@ -179,6 +181,9 @@
     { name: 'year', label: 'Year', type: 'number', min: 1900, pair: true },
     { name: 'make', label: 'Make' },
     { name: 'model', label: 'Model / trim' },
+    { name: 'body', label: 'Body style (3D car)', type: 'select', pair: true,
+      options: [{ value: '', label: 'From VIN' }, ...G3.BODY_TYPES] },
+    { name: 'color', label: 'Paint color', type: 'color', default: G3.DEFAULT_COLOR },
     { name: 'odometer', label: 'Odometer', type: 'number', min: 0, required: true, pair: true },
     { name: 'unit', label: 'Unit', type: 'select', options: [{ value: 'mi', label: 'Miles' }, { value: 'km', label: 'Kilometers' }] },
     { name: 'notes', label: 'Notes', type: 'textarea' }
@@ -194,7 +199,8 @@
         if (!Number.isFinite(odo) || odo < 0) return 'Odometer must be a number.';
         const veh = {
           id: uid(), name: v.name, year: v.year ? Number(v.year) : null, make: v.make, model: v.model,
-          odometer: odo, unit: v.unit === 'km' ? 'km' : 'mi', vin: L.normalizeVin(v.vin), notes: v.notes
+          odometer: odo, unit: v.unit === 'km' ? 'km' : 'mi', vin: L.normalizeVin(v.vin), notes: v.notes,
+          body: v.body, color: v.color
         };
         data.vehicles.push(veh);
         vehicleId = veh.id;
@@ -236,8 +242,10 @@
         if (!Number.isFinite(odo) || odo < 0) return 'Odometer must be a number.';
         Object.assign(v, {
           name: f.name, year: f.year ? Number(f.year) : null, make: f.make, model: f.model,
-          odometer: odo, unit: f.unit === 'km' ? 'km' : 'mi', vin: L.normalizeVin(f.vin), notes: f.notes
+          odometer: odo, unit: f.unit === 'km' ? 'km' : 'mi', vin: L.normalizeVin(f.vin), notes: f.notes,
+          body: f.body, color: f.color
         });
+        if (!f.body) bodyTried.delete(v.id); // "From VIN": look it up again
         persist(); render();
       }
     });
@@ -423,6 +431,8 @@
       <div class="row"><h1 class="grow"><span class="rule"></span>${esc(v.name)}${title ? ' — ' + esc(title) : ''}</h1>
         <button class="btn ghost small" data-action="editvehicle">EDIT VEHICLE</button>
         <button class="btn" data-action="addlog">+ LOG SERVICE</button></div>
+      <div class="car-stage" id="car3d"><span class="car-tag">${esc(G3.bodyLabel(v.body) || 'Body style not set')}</span>
+        <span class="car-hint">drag to spin · <a href="#" class="link" data-action="editvehicle">paint &amp; body</a></span></div>
       ${tiles}
       <div class="section"><h1><span class="rule"></span>What's due</h1>${dueHtml}</div>
       <div class="section"><h1><span class="rule"></span>Recent work</h1>${recentHtml}</div>`;
@@ -510,6 +520,30 @@
       view === 'log' ? viewLog(v) :
       view === 'schedules' ? viewSchedules(v) :
       view === 'settings' ? viewSettings() : viewDashboard(v);
+    mountCar(v);
+  }
+
+  // ---------- 3D car ----------
+  let viewer; // created on first use; null if this PC has no WebGL
+  const bodyTried = new Set();
+
+  function mountCar(v) {
+    const el = $('#car3d');
+    if (!el) return;
+    if (viewer === undefined) { try { viewer = G3.createViewer(); } catch { viewer = null; } }
+    if (!viewer) { el.hidden = true; return; }
+    viewer.show(el, { body: v.body, color: v.color || G3.DEFAULT_COLOR });
+    if (!v.body && v.vin && !bodyTried.has(v.id)) { bodyTried.add(v.id); lookupBody(v); }
+  }
+
+  // Vehicles added before the 3D car existed: get the body style from their VIN once.
+  async function lookupBody(v) {
+    let res;
+    try { res = await window.garage.decodeVin(v.vin); } catch { return; }
+    if (!res || !res.ok) return;
+    const d = L.vehicleFromNhtsa(res.row);
+    const body = G3.bodyFromNhtsa(d.bodyClass, d.doors);
+    if (body && !v.body && data.vehicles.includes(v)) { v.body = body; persist(); render(); }
   }
 
   // ---------- app updates ----------
