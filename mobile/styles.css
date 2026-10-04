@@ -218,6 +218,24 @@ menu .btn { flex: 1; }
 .car-tag { left: 12px; top: 10px; color: var(--accent); }
 .car-hint { right: 12px; bottom: 10px; }
 .car-hint a { pointer-events: auto; }
+.car-tag, .car-hint, .car-photo { z-index: 2; }
+.car-tag { max-width: calc(100% - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the real vehicle's photo: a thumbnail to flip to it, then full size over the 3D model */
+.car-photo { position: absolute; left: 12px; bottom: 10px; width: 92px; height: 58px; padding: 0; border: 1px solid var(--line); background: var(--panel); cursor: pointer; overflow: hidden; }
+.car-photo:hover { border-color: var(--accent); }
+.car-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.car-photo span { font-size: 13px; letter-spacing: 2px; color: var(--accent); }
+.car-photo-full { display: none; position: absolute; inset: 0; z-index: 1; background: var(--panel); }
+.car-photo-full img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.car-credit { position: absolute; left: 112px; bottom: 6px; max-width: calc(100% - 200px); font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.car-stage.show-photo .car-photo-full, .car-stage.no-3d .car-photo-full { display: block; }
+.car-stage.show-photo .car3d-canvas { visibility: hidden; }
+.car-stage.show-photo .car-tag, .car-stage.show-photo .car-hint, .car-credit { background: rgba(14, 14, 12, 0.78); padding: 3px 6px; }
+.car-stage.show-photo .car-tag { left: 6px; top: 6px; }
+.car-stage.show-photo .car-hint { right: 6px; bottom: 6px; }
+.car-stage.no-3d .car-photo { display: none; }
+.car-stage.no-3d .car-credit { left: 12px; }
+.car-stage.no-3d:not(:has(.car-photo-full)) { display: none; }
 
 input[type=color] { height: 44px; padding: 2px 4px; }
 

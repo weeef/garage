@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self' https://api.github.com https://gist.githubusercontent.com">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://upload.wikimedia.org https://thumb.wikimedia.org; style-src 'self'; script-src 'self'; connect-src 'self' https://api.github.com https://gist.githubusercontent.com">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Garage Log</title>
   <link rel="stylesheet" href="styles.css">
@@ -47,6 +47,7 @@
   <script src="../lib/workorder.js"></script>
   <script src="../lib/vendor/three.min.js"></script>
   <script src="../lib/car3d.js"></script>
+  <script src="../lib/carlook.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -32,6 +32,7 @@ test('NHTSA body classes map to 3D body styles', () => {
 test('VIN decode passes doors and body class through', () => {
   const d = L.vehicleFromNhtsa({ Make: 'FORD', Model: 'F-150', ModelYear: '2019', BodyClass: 'Pickup', Doors: '4' });
   assert.equal(d.doors, 4);
+  assert.equal(d.baseModel, 'F-150');
   assert.equal(G.bodyFromNhtsa(d.bodyClass, d.doors), 'pickup');
 });
 
@@ -45,6 +46,31 @@ test('every body style builds a sensible, centred model', () => {
     assert.ok(Math.abs(box.min.x + box.max.x) < 0.1, `${t.value || 'default'} is centred`);
     assert.ok(size.x > 1.5 && size.x < 6.5 && size.y > 0.9 && size.y < 2.3, `${t.value || 'default'} size ${size.x.toFixed(2)}x${size.y.toFixed(2)}`);
   }
+});
+
+test('a car is built to the real dimensions when they are known', () => {
+  const THREE = require('../lib/vendor/three.min.js');
+  const camry = { L: 4.879, W: 1.839, H: 1.445, wb: 2.824 };
+  const car = G.buildCar({ body: 'sedan', color: '#336699', dims: camry });
+  const size = new THREE.Box3().setFromObject(car).getSize(new THREE.Vector3());
+  assert.ok(Math.abs(size.x - camry.L) < 0.08, `length ${size.x.toFixed(3)}`);
+  assert.ok(Math.abs(size.y - camry.H) < 0.05, `height ${size.y.toFixed(3)}`);
+  assert.ok(size.z > camry.W - 0.02 && size.z < camry.W + 0.3, `width ${size.z.toFixed(3)} (mirrors stick out)`);
+  // wheels a wheelbase apart
+  const s = G.sizeFor(G.STYLES.sedan, camry);
+  assert.equal(s.wb, camry.wb);
+  // nonsense from a bad parse falls back to the style's own proportions
+  const odd = G.sizeFor(G.STYLES.sedan, { L: 40, W: 0.1, H: null, wb: 9 });
+  assert.equal(odd.L, G.STYLES.sedan.L);
+  assert.equal(odd.H, G.STYLES.sedan.H);
+  assert.ok(odd.wb / odd.L > 0.48 && odd.wb / odd.L < 0.75);
+});
+
+test('glass, lights and trim are their own materials on the body', () => {
+  const car = G.buildCar({ body: 'suv', color: '#336699' });
+  const body = car.children.find((m) => Array.isArray(m.material));
+  const used = new Set(body.geometry.groups.map((g) => g.materialIndex));
+  for (const i of [0, 1, 2, 3, 4]) assert.ok(used.has(i), `material ${i} used`);
 });
 
 console.log(`\n${passed} car3d tests passed`);

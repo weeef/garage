@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { createUpdater } = require('./lib/updater');
+const { findLook } = require('./lib/carlook');
 
 const dataFile = () => path.join(app.getPath('userData'), 'garage-log.json');
 const EMPTY = { vehicles: [], logs: [], schedules: [] };
@@ -45,6 +46,14 @@ function createWindow() {
     }
   });
   Menu.setApplicationMenu(null);
+  // Links (photo credits, Wikipedia) open in the user's browser, never inside the app.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\//.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (e, url) => {
+    if (!url.startsWith('file:')) e.preventDefault();
+  });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 }
 
@@ -94,6 +103,28 @@ ipcMain.handle('vin:decode', async (_e, vin) => {
     return { ok: false, error: 'Could not reach the lookup service. Check your connection, or fill in the details by hand.' };
   } finally {
     clearTimeout(timer);
+  }
+});
+
+// What the vehicle really looks like (generation, real dimensions, a photo) from Wikipedia, for the
+// 3D car. Fetched here for the same CSP reason as the VIN lookup. Returns {ok, look} - never throws.
+ipcMain.handle('look:find', async (_e, spec) => {
+  const getJson = async (url) => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': `GarageLog/${app.getVersion()} (https://github.com/weeef/garage)` } });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const s = spec || {};
+  try {
+    return { ok: true, look: await findLook({ year: s.year, make: s.make, model: s.model, baseModel: s.baseModel, body: s.body }, getJson) };
+  } catch {
+    return { ok: false }; // offline or Wikipedia unreachable: try again another time
   }
 });
 

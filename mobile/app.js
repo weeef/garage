@@ -4,6 +4,7 @@
   const S = window.GarageSync;
   const C = window.GarageCarfax;
   const G3 = window.GarageCar3D;
+  const GL = window.GarageCarLook;
   const W = window.GarageWorkOrder;
   const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -195,6 +196,7 @@
     const status = $('#vinStatus');
     if (!input || !btn || !status) return;
     let seq = 0;
+    form.dataset.baseModel = '';
     const setStatus = (msg, kind = '') => { status.textContent = msg; status.className = 'vin-status ' + kind; };
 
     const run = async () => {
@@ -213,6 +215,7 @@
       const set = (name, v) => { const el = form.elements[name]; if (el && v != null && v !== '') el.value = v; };
       set('year', d.year); set('make', d.make); set('model', d.model);
       set('body', G3.bodyFromNhtsa(d.bodyClass, d.doors));
+      form.dataset.baseModel = d.baseModel || '';
       if (form.elements.name && !form.elements.name.value.trim()) {
         set('name', [d.year, d.make, d.model].filter(Boolean).join(' '));
       }
@@ -261,7 +264,7 @@
         const veh = {
           id: uid(), name: v.name, year: v.year ? Number(v.year) : null, make: v.make, model: v.model,
           odometer: odo, unit: v.unit === 'km' ? 'km' : 'mi', vin: L.normalizeVin(v.vin), notes: v.notes,
-          body: v.body, color: v.color
+          body: v.body, color: v.color, baseModel: keepBase(v.model, $('#dlgForm').dataset.baseModel)
         };
         data.vehicles.push(veh);
         vehicleId = veh.id;
@@ -288,6 +291,9 @@
     return added;
   }
 
+  // The VIN's base model ("Camry") while the model field still starts with it ("Camry LE").
+  const keepBase = (model, base) => (base && String(model || '').toLowerCase().startsWith(base.toLowerCase()) ? base : '');
+
   function offerPresets(veh) {
     confirmDialog('Add common schedules?',
       "Start with a standard set of reminders (oil, filters, fluids, plugs, tire rotation). Intervals are generic; edit them to match your owner's manual.",
@@ -308,7 +314,7 @@
         Object.assign(v, {
           name: f.name, year: f.year ? Number(f.year) : null, make: f.make, model: f.model,
           odometer: odo, unit: f.unit === 'km' ? 'km' : 'mi', vin: L.normalizeVin(f.vin), notes: f.notes,
-          body: f.body, color: f.color
+          body: f.body, color: f.color, baseModel: keepBase(f.model, $('#dlgForm').dataset.baseModel || v.baseModel)
         });
         if (!f.body) bodyTried.delete(v.id); // "From VIN": look it up again
         persist(); render();
@@ -484,8 +490,7 @@
 
     return `
       <h2 class="title">${esc(v.name)}${sub ? `<small>${esc(sub)}</small>` : ''}</h2>
-      <div class="car-stage" id="car3d"><span class="car-tag">${esc(G3.bodyLabel(v.body) || 'Body style not set')}</span>
-        <span class="car-hint">swipe to spin · <a href="#" class="link" data-action="editvehicle">paint</a></span></div>
+      ${carStageHtml(v)}
       ${summary}
       <div class="tiles">
         <button class="tile odo" data-action="odo"><div class="k">Odometer · tap to update</div><div class="v">${fmtInt(v.odometer)} ${unit(v)}</div></button>
@@ -505,6 +510,22 @@
       ${withActions ? `<div class="btns"><button class="btn ghost small" data-action="editlog" data-id="${l.id}">EDIT</button>
         <button class="btn danger small" data-action="dellog" data-id="${l.id}">DELETE</button></div>` : ''}
     </div>`;
+  }
+
+  // The 3D car, plus the real vehicle's photo (from its Wikipedia article) to flip to.
+  function carStageHtml(v) {
+    const look = v.look && !v.look.none ? v.look : null;
+    const years = look && look.years ? ` · ${look.years[0]}–${Math.min(look.years[1], new Date().getFullYear() + 1)}` : '';
+    const tag = look ? `${look.name || look.title}${years}` : (G3.bodyLabel(v.body) || 'Body style not set');
+    const ph = look && look.photo && GL.PHOTO_HOST.test(look.photo.url) ? look.photo : null;
+    const credit = ph ? [ph.credit, ph.license].filter(Boolean).join(' · ') : '';
+    const flipped = carPhoto && ph;
+    return `<div class="car-stage${flipped ? ' show-photo' : ''}" id="car3d">
+        <span class="car-tag" title="${look ? 'Built to the real size of the ' + esc(look.title) : ''}">${esc(tag)}</span>
+        ${ph ? `<div class="car-photo-full"><img src="${esc(ph.url)}" alt="Photo of a ${esc(look.title)}">
+          <span class="car-credit">Photo${credit ? ': ' + esc(credit) : ''} · <a href="${esc(ph.page || look.url)}" target="_blank" rel="noopener" class="link">source</a></span></div>
+          <button type="button" class="car-photo" data-action="carphoto" title="${flipped ? 'Show the 3D model' : 'Show a real photo'}">${flipped ? '<span>3D</span>' : `<img src="${esc(ph.url)}" alt="">`}</button>` : ''}
+        <span class="car-hint">${flipped ? '' : 'swipe to spin · '}<a href="#" class="link" data-action="editvehicle">paint</a>${look ? ` · <a href="${esc(look.url)}" target="_blank" rel="noopener" class="link">about</a>` : ''}</span></div>`;
   }
 
   function viewLog(v) {
@@ -604,24 +625,70 @@
 
   // ---------- 3D car ----------
   let viewer; // created on first use; null if the browser has no WebGL
+  let carPhoto = false; // showing the real photo instead of the 3D model
   const bodyTried = new Set();
 
   function mountCar(v) {
     const el = $('#car3d');
     if (!el) return;
     if (viewer === undefined) { try { viewer = G3.createViewer(); } catch { viewer = null; } }
-    if (!viewer) { el.hidden = true; return; }
-    viewer.show(el, { body: v.body, color: v.color || G3.DEFAULT_COLOR });
-    if (!v.body && v.vin && !bodyTried.has(v.id)) { bodyTried.add(v.id); lookupBody(v); }
+    if (viewer) viewer.show(el, { body: v.body, color: v.color || G3.DEFAULT_COLOR, dims: v.look && v.look.dims });
+    else el.classList.add('no-3d'); // no WebGL: the photo can still be shown
+    if (v.vin && (!v.body || !v.baseModel) && !bodyTried.has(v.id)) { bodyTried.add(v.id); lookupBody(v); }
+    else refreshLook(v);
   }
 
-  // Vehicles added before the 3D car existed: get the body style from their VIN once.
+  // Vehicles added before these features existed: get the body style and base model from the VIN once.
   async function lookupBody(v) {
-    const res = await fetchVin(v.vin);
-    if (!res.ok) return;
-    const d = L.vehicleFromNhtsa(res.row);
-    const body = G3.bodyFromNhtsa(d.bodyClass, d.doors);
-    if (body && !v.body && data.vehicles.includes(v)) { v.body = body; persist(); if (!$('#dlg').open) render(); }
+    let res;
+    try { res = await fetchVin(v.vin); } catch { res = null; }
+    if (res && res.ok && data.vehicles.includes(v)) {
+      const d = L.vehicleFromNhtsa(res.row);
+      const body = G3.bodyFromNhtsa(d.bodyClass, d.doors);
+      let changed = false;
+      if (body && !v.body) { v.body = body; changed = true; }
+      // fill in whatever was left blank
+      for (const k of ['year', 'make', 'model']) if (!v[k] && d[k]) { v[k] = d[k]; changed = true; }
+      if (d.baseModel && !v.baseModel && String(v.make || '').toLowerCase() === String(d.make || '').toLowerCase()) {
+        v.baseModel = d.baseModel;
+        changed = true;
+      }
+      if (changed) { persist(); if (vehicle() === v && !$('#dlg').open) render(); }
+    }
+    refreshLook(v);
+  }
+
+  // What the vehicle really looks like: its generation's real dimensions and a photo (lib/carlook.js).
+  // Looked up again whenever year / make / model change; "nothing found" is remembered too.
+  const lookTried = new Set();
+  const fetchLook = async (s) => {
+    const getJson = async (url) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12000);
+      try {
+        const res = await fetch(url, { signal: ctrl.signal });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    try { return { ok: true, look: await GL.findLook(s, getJson) }; } catch { return { ok: false }; }
+  };
+  const lookSpec = (v) => ({ year: v.year, make: v.make, model: v.baseModel || v.model, baseModel: v.baseModel, body: v.body });
+
+  async function refreshLook(v) {
+    const spec = lookSpec(v);
+    const key = GL.lookKey(spec);
+    if (!v.make || !spec.model || (v.look && v.look.key === key) || lookTried.has(v.id + key)) return;
+    lookTried.add(v.id + key);
+    let res = await fetchLook(spec);
+    // a model typed with its trim ("Camry LE"): try its first word on its own
+    if (res.ok && !res.look && !v.baseModel && /\s/.test(spec.model)) res = await fetchLook({ ...spec, model: spec.model.split(/\s+/)[0] });
+    if (!res.ok || !data.vehicles.includes(v) || GL.lookKey(lookSpec(v)) !== key) return; // offline: try next time
+    v.look = res.look ? { ...res.look, key } : { key, none: true };
+    persist();
+    if (vehicle() === v && !$('#dlg').open) render();
   }
 
   // ---------- files ----------
@@ -951,6 +1018,7 @@
   // ---------- events ----------
   const actions = {
     import: importRecords,
+    carphoto: () => { carPhoto = !carPhoto; render(); },
     syncon: connectSync,
     syncnow: () => runSync(true),
     syncoff: disconnectSync,
