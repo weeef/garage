@@ -1,7 +1,7 @@
 {
   "name": "garage-log",
   "productName": "Garage Log",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "Vehicle maintenance log: track services, schedules and costs for any vehicle.",
   "author": "Jordan Bastian",
   "main": "main.js",
