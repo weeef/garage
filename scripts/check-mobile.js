@@ -35,14 +35,15 @@ function problems() {
   const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
   const html = read('mobile/index.html');
   const sw = read('mobile/sw.js');
-  const phoneApp = read('mobile/app.js');
+  // code that may load a file on demand: the phone app and the shared modules it loads
+  const phoneCode = [read('mobile/app.js'), ...sharedFiles().filter((f) => !f.startsWith('vendor/') && f.endsWith('.js')).map((f) => read('lib/' + f))].join('\n');
   const shell = (sw.match(/const SHELL = \[([\s\S]*?)\];/) || [])[1] || '';
   for (const f of sharedFiles()) {
     const mob = path.join(root, 'mobile', 'lib', f);
     if (!fs.existsSync(mob)) { out.push(`mobile/lib/${f} is missing (run npm run sync-version)`); continue; }
     if (!fs.readFileSync(mob).equals(fs.readFileSync(path.join(root, 'lib', f)))) out.push(`mobile/lib/${f} differs from lib/${f} (run npm run sync-version)`);
     if (!f.endsWith('.js') || f.includes('.worker.')) continue; // licenses; pdf.js loads its worker itself
-    const lazy = phoneApp.includes(path.basename(f)); // loaded on demand, e.g. pdf.js and three.js
+    const lazy = phoneCode.includes(path.basename(f)); // loaded on demand, e.g. pdf.js and three.js
     if (!html.includes(`src="lib/${f}"`) && !lazy) out.push(`mobile/index.html doesn't load lib/${f}`);
     if (!shell.includes(`'lib/${f}'`)) out.push(`mobile/sw.js doesn't cache lib/${f} for offline use`);
   }

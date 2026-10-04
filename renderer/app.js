@@ -25,7 +25,6 @@
   const unit = (v) => (v && v.unit === 'km' ? 'km' : 'mi');
 
   // ---------- persistence ----------
-  let saveTimer = null;
   let saved = null; // copy of data as last saved, to work out what changed (for sync)
   async function persist() {
     S.stampChanges(saved, data, Date.now());
@@ -36,10 +35,6 @@
       toast('SAVE FAILED: ' + err.message);
     }
     syncSoon();
-  }
-  function persistSoon() {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(persist, 150);
   }
 
   function toast(msg) {
@@ -256,7 +251,7 @@
           odometer: odo, unit: f.unit === 'km' ? 'km' : 'mi', vin: L.normalizeVin(f.vin), notes: f.notes,
           body: f.body, color: f.color, baseModel: keepBase(f.model, $('#dlgForm').dataset.baseModel || v.baseModel)
         });
-        if (!f.body) bodyTried.delete(v.id); // "From VIN": look it up again
+        if (!f.body) car.retryVin(v.id); // "From VIN": look it up again
         persist(); render();
       }
     });
@@ -443,27 +438,11 @@
       <div class="row"><h1 class="grow"><span class="rule"></span>${esc(v.name)}${title ? ' — ' + esc(title) : ''}</h1>
         <button class="btn ghost small" data-action="editvehicle">EDIT VEHICLE</button>
         <button class="btn" data-action="addlog">+ LOG SERVICE</button></div>
-      ${carStageHtml(v)}
+      ${car.stageHtml(v)}
       ${fuelCardHtml(v)}
       ${tiles}
       <div class="section"><h1><span class="rule"></span>What's due</h1>${dueHtml}</div>
       <div class="section"><h1><span class="rule"></span>Recent work</h1>${recentHtml}</div>`;
-  }
-
-  // The 3D car, plus the real vehicle's photo (from its Wikipedia article) to flip to.
-  function carStageHtml(v) {
-    const look = v.look && !v.look.none ? v.look : null;
-    const years = look && look.years ? ` · ${look.years[0]}–${Math.min(look.years[1], new Date().getFullYear() + 1)}` : '';
-    const tag = look ? `${look.name || look.title}${years}` : (G3.bodyLabel(v.body) || 'Body style not set');
-    const ph = look && look.photo && GL.PHOTO_HOST.test(look.photo.url) ? look.photo : null;
-    const credit = ph ? [ph.credit, ph.license].filter(Boolean).join(' · ') : '';
-    const flipped = carPhoto && ph;
-    return `<div class="car-stage${flipped ? ' show-photo' : ''}" id="car3d">
-        <span class="car-tag" title="${look ? 'Built to the real size of the ' + esc(look.title) : ''}">${esc(tag)}</span>
-        ${ph ? `<div class="car-photo-full"><img src="${esc(ph.url)}" alt="Photo of a ${esc(look.title)}">
-          <span class="car-credit">Photo${credit ? ': ' + esc(credit) : ''} · <a href="${esc(ph.page || look.url)}" target="_blank" rel="noopener" class="link">source</a></span></div>
-          <button type="button" class="car-photo" data-action="carphoto" title="${flipped ? 'Show the 3D model' : 'Show a real photo'}">${flipped ? '<span>3D</span>' : `<img src="${esc(ph.url)}" alt="">`}</button>` : ''}
-        <span class="car-hint">${flipped ? '' : 'drag to spin · '}<a href="#" class="link" data-action="editvehicle">paint &amp; body</a>${look ? ` · <a href="${esc(look.url)}" target="_blank" rel="noopener" class="link">about</a>` : ''}</span></div>`;
   }
 
   function viewLog(v) {
@@ -586,67 +565,22 @@
       view === 'schedules' ? viewSchedules(v) :
       view === 'fuel' ? viewFuel(v) :
       view === 'settings' ? viewSettings() : viewDashboard(v);
-    mountCar(v);
+    car.mount(v);
     TH.paintSwatches(main);
     main.dataset.here = here;
     main.scrollTop = keepScroll;
     renderUpdateBar();
   }
 
-  // ---------- 3D car ----------
-  let viewer; // created on first use; null if this PC has no WebGL
-  let carPhoto = false; // showing the real photo instead of the 3D model
-  const bodyTried = new Set();
-
-  function mountCar(v) {
-    const el = $('#car3d');
-    if (!el) return;
-    if (viewer === undefined) { try { viewer = G3.createViewer(); } catch { viewer = null; } }
-    if (viewer) viewer.show(el, { body: v.body, color: v.color || G3.DEFAULT_COLOR, dims: v.look && v.look.dims });
-    else el.classList.add('no-3d'); // no WebGL: the photo can still be shown
-    if (v.vin && (!v.body || !v.baseModel) && !bodyTried.has(v.id)) { bodyTried.add(v.id); lookupBody(v); }
-    else refreshLook(v);
-  }
-
-  // Vehicles added before these features existed: get the body style and base model from the VIN once.
-  async function lookupBody(v) {
-    let res;
-    try { res = await window.garage.decodeVin(v.vin); } catch { res = null; }
-    if (res && res.ok && data.vehicles.includes(v)) {
-      const d = L.vehicleFromNhtsa(res.row);
-      const body = G3.bodyFromNhtsa(d.bodyClass, d.doors);
-      let changed = false;
-      if (body && !v.body) { v.body = body; changed = true; }
-      // fill in whatever was left blank
-      for (const k of ['year', 'make', 'model']) if (!v[k] && d[k]) { v[k] = d[k]; changed = true; }
-      if (d.baseModel && !v.baseModel && String(v.make || '').toLowerCase() === String(d.make || '').toLowerCase()) {
-        v.baseModel = d.baseModel;
-        changed = true;
-      }
-      if (changed) { persist(); if (vehicle() === v) render(); }
-    }
-    refreshLook(v);
-  }
-
-  // What the vehicle really looks like: its generation's real dimensions and a photo (lib/carlook.js).
-  // Looked up again whenever year / make / model change; "nothing found" is remembered too.
-  const lookTried = new Set();
-  const fetchLook = async (s) => { try { return await window.garage.findLook(s); } catch { return { ok: false }; } };
-  const lookSpec = (v) => ({ year: v.year, make: v.make, model: v.baseModel || v.model, baseModel: v.baseModel, body: v.body });
-
-  async function refreshLook(v) {
-    const spec = lookSpec(v);
-    const key = GL.lookKey(spec);
-    if (!v.make || !spec.model || (v.look && v.look.key === key) || lookTried.has(v.id + key)) return;
-    lookTried.add(v.id + key);
-    let res = await fetchLook(spec);
-    // a model typed with its trim ("Camry LE"): try its first word on its own
-    if (res.ok && !res.look && !v.baseModel && /\s/.test(spec.model)) res = await fetchLook({ ...spec, model: spec.model.split(/\s+/)[0] });
-    if (!res.ok || !data.vehicles.includes(v) || GL.lookKey(lookSpec(v)) !== key) return; // offline: try next time
-    v.look = res.look ? { ...res.look, key } : { key, none: true };
-    persist();
-    if (vehicle() === v) render();
-  }
+  // ---------- the car on the dashboard (lib/ui-car.js) ----------
+  const car = window.GarageCarUI.create({
+    data: () => data, vehicle, persist, esc, $, L, G3, GL,
+    redraw: (v) => { if (vehicle() === v) render(); },
+    decodeVin: async (vin) => { try { return await window.garage.decodeVin(vin); } catch { return null; } },
+    findLook: async (spec) => { try { return await window.garage.findLook(spec); } catch { return { ok: false }; } },
+    threeSrc: '../lib/vendor/three.min.js',
+    hints: { spin: 'drag to spin', paint: 'paint & body' }
+  });
 
   // ---------- app updates ----------
   // The main process checks on start, every 6 hours and when the window comes back into focus; the
@@ -701,7 +635,7 @@
   async function exportCsv() {
     const v = vehicle();
     if (!v) return;
-    const safe = v.name.replace(/[^\w\-]+/g, '_');
+    const safe = v.name.replace(/[^\w-]+/g, '_');
     const res = await window.garage.exportFile({
       defaultName: `${safe}-service-log.csv`,
       content: L.logsToCsv(v, data.logs),
@@ -715,89 +649,10 @@
   const ROW = (e, v, isOrder) => `<span class="d">${esc(e.date || '')}</span><span class="o">${isOrder ? money(e.cost) : fmtInt(e.odometer) + ' ' + unit(v)}</span>
         <span class="s">${esc(e.service)}${e.duplicate ? ' <em>already logged</em>' : ''}<small>${esc(e.notes.replace(/^Imported from CARFAX( · )?/, ''))}</small></span>`;
 
-  // ---------- importing records: shop work orders / receipts, or CARFAX history ----------
-  let pdfReady = null;
-  function loadPdfJs() {
-    // Loaded on first use only (it's large).
-    if (!pdfReady) {
-      pdfReady = new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = PDF_BASE + 'pdf.min.js';
-        s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_BASE + 'pdf.worker.min.js'; resolve(window.pdfjsLib); };
-        s.onerror = () => { pdfReady = null; reject(new Error('Could not load the PDF reader.')); };
-        document.head.appendChild(s);
-      });
-    }
-    return pdfReady;
-  }
-
-  async function pdfText(file) {
-    const lib = await loadPdfJs();
-    const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
-    const pages = [];
-    for (let i = 1; i <= Math.min(doc.numPages, 20); i++) {
-      const page = await doc.getPage(i);
-      pages.push(W.linesFromPdfItems((await page.getTextContent()).items));
-    }
-    return pages.join('\n');
-  }
-
-  function importRecords() {
-    const v = vehicle();
-    if (!v) return;
-    openForm({
-      title: `Import records · ${v.name}`,
-      fields: [{ name: 'text', label: 'Or paste the text', type: 'textarea' }],
-      okLabel: 'READ IT',
-      onSubmit: (f) => (f.text ? readRecords(v, f.text) : 'Paste some text, or open a PDF.')
-    });
-    $('#f_text').rows = 7;
-    $('#dlgFields').insertAdjacentHTML('afterbegin', `<p class="hint">Works with <b>shop work orders and receipts</b>
-      (Les Schwab, Discount Tire, Jiffy Lube, dealers and others) and <b>CARFAX</b> service history.</p>
-      <div class="import-pdf"><button type="button" class="btn" id="pdfBtn">OPEN A PDF</button>
-        <span class="dim">the invoice PDF from the shop's email or website</span>
-        <input type="file" id="pdfFile" accept="application/pdf,.pdf" hidden></div>
-      <p class="hint">${PASTE_HINT}</p>`);
-    const btn = $('#pdfBtn');
-    const input = $('#pdfFile');
-    btn.onclick = () => { input.value = ''; input.click(); };
-    input.onchange = async () => {
-      const file = input.files && input.files[0];
-      if (!file) return;
-      const err = $('#dlgError');
-      btn.disabled = true;
-      btn.textContent = 'READING…';
-      err.textContent = '';
-      try {
-        const text = await pdfText(file);
-        if (text.replace(/\s/g, '').length < 20) {
-          err.textContent = "That PDF has no text in it (it's a scanned picture). Copy the text with your phone's camera (Live Text / Google Lens) and paste it instead.";
-          return;
-        }
-        $('#f_text').value = text;
-        const problem = readRecords(v, text);
-        if (problem) err.textContent = problem;
-        else $('#dlg').close();
-      } catch (e) {
-        err.textContent = 'Could not read that PDF' + (e && e.message ? ': ' + e.message : '.');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'OPEN A PDF';
-      }
-    };
-  }
-
-  // Works out what the text is and opens the preview. Returns an error message, or nothing.
-  function readRecords(v, text) {
-    if (!W.looksLikeCarfax(text)) {
-      const order = W.parseWorkOrder(text);
-      const entries = W.toEntries(order, v, data.logs);
-      if (entries.length) { setTimeout(() => previewImport(v, entries, order), 80); return; }
-    }
-    const entries = C.toEntries(C.parseCarfax(text), v, data.logs);
-    if (entries.length) { setTimeout(() => previewImport(v, entries, null), 80); return; }
-    return "Couldn't find any service work in that. Make sure it includes the lines describing the work (e.g. \"Rotate & balance\", \"Oil change\").";
-  }
+  // ---------- importing records: shop work orders / receipts, or CARFAX history (lib/ui-import.js) ----------
+  const { pdfText, importRecords } = window.GarageImportUI.create({
+    data: () => data, vehicle, openForm, $, W, C, pdfBase: PDF_BASE, pasteHint: PASTE_HINT, previewImport
+  });
 
   // order: the parsed work order (one visit, date/mileage editable), or null for CARFAX (many visits).
   function previewImport(v, entries, order) {
@@ -939,226 +794,9 @@
   });
   document.addEventListener('change', (e) => { if (e.target.id === 'accentPick') render(); });
 
-  // ---------- fuel ----------
-  // Fill-ups (lib/fuel.js): typed in, or read from gas receipts. They feed the Fuel tab and the
-  // dashboard's fuel card, and count as odometer readings.
-  const fuelFor = (v) => data.fuel.filter((f) => f.vehicleId === v.id);
-  const volName = (v) => (F.volumeUnit(v) === 'L' ? 'liter' : 'gallon');
-  const volAbbr = (v) => (F.volumeUnit(v) === 'L' ? 'L' : 'gal');
-  const fmtVol = (n) => (n == null || n === '' ? '—' : Number(n).toFixed(3).replace(/\.?0+$/, ''));
-  const fmtPrice = (n) => (n == null || n === '' ? '—' : '$' + Number(n).toFixed(3));
-  const GRADE_OPTIONS = [{ value: '', label: '—' }, { value: 'regular', label: 'Regular' }, { value: 'midgrade', label: 'Midgrade' },
-    { value: 'premium', label: 'Premium' }, { value: 'diesel', label: 'Diesel' }, { value: 'e85', label: 'E85' }];
-  const gradeLabel = (g) => (GRADE_OPTIONS.find((o) => o.value === g) || {}).label || '';
-
-  function fuelForm(existing, prefill) {
-    const v = vehicle();
-    if (!v) return;
-    const start = existing || prefill || {};
-    openForm({
-      title: existing ? 'Edit fill-up' : prefill ? 'Check the receipt' : 'Add a fill-up',
-      fields: [
-        { name: 'date', label: 'Date', type: 'date', required: true, pair: true },
-        { name: 'odometer', label: `Odometer (${unit(v)}, optional)`, type: 'number', min: 0 },
-        { name: 'volume', label: `${volName(v)}s`.replace(/^./, (c) => c.toUpperCase()), type: 'number', min: 0, step: '0.001', pair: true },
-        { name: 'price', label: `Price per ${volName(v)} ($)`, type: 'number', min: 0, step: '0.001' },
-        { name: 'total', label: 'Total ($)', type: 'number', min: 0, step: '0.01', pair: true },
-        { name: 'full', label: 'Tank', type: 'select', options: [{ value: 'yes', label: 'Filled up' }, { value: 'no', label: 'Partial fill' }] },
-        { name: 'station', label: 'Station', placeholder: 'e.g. Costco', pair: true },
-        { name: 'grade', label: 'Fuel', type: 'select', options: GRADE_OPTIONS },
-        { name: 'notes', label: 'Notes', type: 'textarea' }
-      ],
-      initial: { date: today(), ...start, full: start.full === false ? 'no' : 'yes' },
-      onSubmit: (f) => {
-        const n = (x) => (x === '' ? null : Number(x));
-        const vals = { odometer: n(f.odometer), volume: n(f.volume), price: n(f.price), total: n(f.total) };
-        for (const [k, x] of Object.entries(vals)) if (x != null && (!Number.isFinite(x) || x < 0)) return `${k[0].toUpperCase() + k.slice(1)} must be a number.`;
-        if (!L.parseDate(f.date)) return 'Pick a valid date.';
-        const entry = F.complete({ vehicleId: v.id, date: f.date, ...vals, full: f.full !== 'no', station: f.station, grade: f.grade, notes: f.notes,
-          time: start.time || '', ref: start.ref || '' }); // from the receipt, kept to spot it if imported again
-        if (!entry.total) return `Enter the total, or the ${volName(v)}s and the price.`;
-        if (existing) Object.assign(existing, entry);
-        else data.fuel.push({ id: uid(), ...entry });
-        if (entry.odometer) v.odometer = L.highestOdometer(v, [...data.logs, ...data.fuel]);
-        persist(); render();
-        toast(existing ? 'FILL-UP UPDATED' : 'FILL-UP ADDED');
-      }
-    });
-  }
-
-  function deleteFuel(id) {
-    const f = data.fuel.find((x) => x.id === id);
-    if (!f) return;
-    confirmDialog('Delete fill-up?', `Remove the ${money(f.total)} fill-up from ${f.date}?`, 'DELETE', () => {
-      data.fuel = data.fuel.filter((x) => x.id !== id);
-      fuelPicked.delete(id);
-      persist(); render();
-      toast('FILL-UP DELETED');
-    });
-  }
-
-  // Picking fill-ups to delete together: checkboxes on the Fuel tab, select all, delete selected.
-  const fuelPicked = new Set();
-
-  function fuelPickBar(fills) {
-    const n = fills.filter((f) => fuelPicked.has(f.id)).length;
-    const all = n === fills.length;
-    return `<div class="fuel-pickbar"><label><input type="checkbox" class="fuel-pick-all"${all ? ' checked' : ''}> Select all ${fills.length}</label>
-      <button type="button" class="btn danger small" data-action="delfuelsel"${n ? '' : ' disabled'}>DELETE SELECTED${n ? ` (${n})` : ''}</button></div>`;
-  }
-
-  document.addEventListener('change', (e) => {
-    const el = e.target;
-    const v = vehicle();
-    if (!v || !el.classList) return;
-    if (el.classList.contains('fuel-pick')) {
-      if (el.checked) fuelPicked.add(el.dataset.id); else fuelPicked.delete(el.dataset.id);
-      render();
-    } else if (el.classList.contains('fuel-pick-all')) {
-      for (const f of fuelFor(v)) if (el.checked) fuelPicked.add(f.id); else fuelPicked.delete(f.id);
-      render();
-    }
-  });
-
-  function deleteSelectedFuel() {
-    const v = vehicle();
-    if (!v) return;
-    const picked = fuelFor(v).filter((f) => fuelPicked.has(f.id));
-    if (!picked.length) return;
-    const sum = picked.reduce((s, f) => s + (Number(f.total) || 0), 0);
-    confirmDialog(`Delete ${picked.length} fill-up${picked.length === 1 ? '' : 's'}?`,
-      `${money(sum)} in all${picked.length === fuelFor(v).length ? ' (every fill-up for this vehicle)' : ''}. This can't be undone, so export a backup first if unsure.`,
-      `DELETE ${picked.length}`, () => {
-        const ids = new Set(picked.map((f) => f.id));
-        data.fuel = data.fuel.filter((f) => !ids.has(f.id));
-        ids.forEach((id) => fuelPicked.delete(id));
-        persist(); render();
-        toast(`${ids.size} FILL-UP${ids.size === 1 ? '' : 'S'} DELETED`);
-      });
-  }
-
-  function importFuel() {
-    const v = vehicle();
-    if (!v) return;
-    openForm({
-      title: `Fuel receipts · ${v.name}`,
-      fields: [{ name: 'text', label: 'Or paste the receipt text', type: 'textarea' }],
-      okLabel: 'READ IT',
-      onSubmit: (f) => (f.text ? readFuel(v, F.parseReceipts(f.text)) : 'Paste a receipt, or open PDFs.')
-    });
-    $('#f_text').rows = 6;
-    $('#dlgFields').insertAdjacentHTML('afterbegin', `<p class="hint">Gas station receipts: PDFs (pick as many as you like at once${'ontouchstart' in window ? '' : ', or drag them onto this window'}),
-      an emailed receipt, or the paper slip. The app reads the date, ${volName(v)}s, price and total, and you check them before anything is saved.</p>
-      <div class="import-pdf"><button type="button" class="btn" id="pdfBtn">OPEN PDFs</button>
-        <span class="dim" id="pdfStatus"></span>
-        <input type="file" id="pdfFile" accept="application/pdf,.pdf" multiple hidden></div>
-      <p class="hint">For a paper receipt, point your phone's camera at it and copy the text with Live Text (iPhone) or Google Lens (Android), then paste it here.</p>`);
-    const btn = $('#pdfBtn');
-    const input = $('#pdfFile');
-    btn.onclick = () => { input.value = ''; input.click(); };
-    input.onchange = () => readFuelPdfs(v, [...(input.files || [])]);
-    // drop PDFs anywhere on the dialog
-    const form = $('#dlgForm');
-    form.ondragover = (e) => { e.preventDefault(); form.classList.add('drop'); };
-    form.ondragleave = () => form.classList.remove('drop');
-    form.ondrop = (e) => {
-      e.preventDefault();
-      form.classList.remove('drop');
-      readFuelPdfs(v, [...(e.dataTransfer.files || [])]);
-    };
-  }
-
-  // Many receipt PDFs at once: read each, then one review of everything found.
-  async function readFuelPdfs(v, files) {
-    const pdfs = files.filter((f) => /\.pdf$/i.test(f.name) || f.type === 'application/pdf');
-    if (!pdfs.length) return;
-    const btn = $('#pdfBtn');
-    const status = $('#pdfStatus');
-    const err = $('#dlgError');
-    btn.disabled = true;
-    err.textContent = '';
-    const fills = [];
-    const unreadable = [];
-    for (let i = 0; i < pdfs.length; i++) {
-      status.textContent = `reading ${i + 1} of ${pdfs.length}…`;
-      try {
-        const found = F.parseReceipts(await pdfText(pdfs[i]));
-        if (found.length) fills.push(...found.map((r) => ({ ...r, file: pdfs[i].name })));
-        else unreadable.push(pdfs[i].name);
-      } catch {
-        unreadable.push(pdfs[i].name);
-      }
-    }
-    btn.disabled = false;
-    status.textContent = '';
-    const note = unreadable.length
-      ? `${unreadable.length} file${unreadable.length === 1 ? '' : 's'} had no receipt text (a scanned picture, or not a fuel receipt): ${unreadable.join(', ')}.`
-      : '';
-    if (!fills.length) { err.textContent = note || "Couldn't find a fuel purchase in those PDFs."; return; }
-    const problem = readFuel(v, fills, note);
-    if (problem) err.textContent = problem + (note ? ' ' + note : '');
-    else $('#dlg').close();
-  }
-
-  // One receipt opens in the fill-up form to check; several are listed, then added together.
-  // receipts: from F.parseReceipts. note: anything to mention about files that couldn't be read.
-  // Returns an error message, or nothing.
-  function readFuel(v, receipts, note) {
-    const fills = receipts.map((r) => F.toFillUp(r, v, today()));
-    if (!fills.length) return `Couldn't find a fuel purchase in that. It needs at least the total, or the ${volName(v)}s and price.`;
-    // the same receipt twice: its own transaction number, or the same date and total
-    const keys = (f) => [f.date + '|' + Number(f.total).toFixed(2), ...(f.ref ? ['ref|' + f.ref] : [])];
-    const have = new Set(fuelFor(v).flatMap(keys));
-    const fresh = [];
-    for (const f of fills) {
-      if (keys(f).some((k) => have.has(k))) continue;
-      keys(f).forEach((k) => have.add(k)); // also drops the same PDF picked twice
-      fresh.push(f);
-    }
-    if (!fresh.length) return 'Those receipts are already in the fuel log.';
-    if (fresh.length === 1 && !note) { setTimeout(() => fuelForm(null, fresh[0]), 80); return; }
-    fresh.sort((a, b) => (a.date < b.date ? -1 : 1));
-    const sum = fresh.reduce((s, f) => s + (f.total || 0), 0);
-    const shown = fresh.slice(0, 12).map((f) => `${f.date} ${f.station || 'fuel'} ${money(f.total)}`).join(' · ');
-    const more = fresh.length > 12 ? ` · and ${fresh.length - 12} more` : '';
-    const skipped = fills.length - fresh.length;
-    setTimeout(() => confirmDialog(`Add ${fresh.length} fill-up${fresh.length === 1 ? '' : 's'}?`,
-      `${money(sum)} in all, ${fresh[0].date} to ${fresh[fresh.length - 1].date}: ${shown}${more}.` +
-      `${skipped ? ` ${skipped} already in the log, skipped.` : ''}${note ? ' ' + note : ''} You can edit any of them afterwards on the Fuel tab.`,
-      `ADD ${fresh.length}`, () => {
-        for (const f of fresh) data.fuel.push({ id: uid(), ...f });
-        v.odometer = L.highestOdometer(v, [...data.logs, ...data.fuel]);
-        persist(); render();
-        toast(`${fresh.length} FILL-UP${fresh.length === 1 ? '' : 'S'} ADDED`);
-      }), 80);
-  }
-
-  // The dashboard's fuel highlight: the money first, then economy and the last fill-up.
-  function fuelCardHtml(v) {
-    const fills = fuelFor(v);
-    if (!fills.length) {
-      return `<div class="fuel-card empty-fuel"><div class="fuel-head"><span class="fuel-k">Fuel</span>
-          <span class="fuel-note">Track what you spend on gas: add fill-ups or import receipts, and see your yearly fuel cost here.</span></div>
-        <div class="fuel-btns"><button class="btn small" data-action="importfuel">IMPORT RECEIPTS</button>
-          <button class="btn ghost small" data-action="addfuel">+ FILL-UP</button></div></div>`;
-    }
-    const st = F.fuelStats(fills, v);
-    const year = new Date().getFullYear();
-    const last = st.last;
-    const stat = (k, val, sub) => `<div class="fuel-stat"><div class="k">${k}</div><div class="v">${val}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
-    return `<div class="fuel-card"><div class="fuel-head"><span class="fuel-k">Fuel</span>
-        <a href="#" class="link" data-action="gofuel">${st.count} fill-up${st.count === 1 ? '' : 's'} · open fuel log</a></div>
-      <div class="fuel-stats">
-        ${stat(`${year} so far`, money(st.thisYear), '')}
-        ${stat('Per year', st.perYear != null ? money(st.perYear) : '—', st.perMonth != null ? `≈ ${money(st.perMonth)} a month` : 'needs a few weeks of fill-ups')}
-        ${stat('All time', money(st.total), '')}
-        ${stat(st.economyUnit, st.economy != null ? String(st.economy) : '—', st.economy != null ? 'full-tank average' : 'needs 2 full fills with odometer')}
-        ${stat(`Avg per ${volAbbr(v)}`, fmtPrice(st.avgPrice), '')}
-      </div>
-      <div class="fuel-foot"><span>Last: ${esc(last.date)}${last.station ? ' · ' + esc(last.station) : ''} · ${money(last.total)}</span>
-        <span class="fuel-btns"><button class="btn small" data-action="addfuel">+ FILL-UP</button>
-          <button class="btn ghost small" data-action="importfuel">IMPORT</button></span></div></div>`;
-  }
+  // ---------- fuel (lib/ui-fuel.js) ----------
+  const { fuelFor, volAbbr, fmtVol, fmtPrice, gradeLabel, fuelPicked, fuelPickBar, fuelForm, deleteFuel, deleteSelectedFuel, importFuel, fuelCardHtml } =
+    window.GarageFuelUI.create({ data: () => data, vehicle, persist, render, openForm, confirmDialog, toast, uid, today, money, esc, unit, pdfText, $, L, F });
 
   // A file dropped anywhere else must not replace the app with it.
   document.addEventListener('dragover', (e) => e.preventDefault());
@@ -1209,7 +847,7 @@
     backup,
     restore,
     checkupdate: checkUpdates,
-    carphoto: () => { carPhoto = !carPhoto; render(); },
+    carphoto: () => car.togglePhoto(),
     updl: () => window.garage.updateDownload(),
     updismiss: () => { U.saveLater(localStorage, updateState.latest); renderUpdateBar(); },
     upinstall: () => window.garage.updateInstall()

@@ -21,7 +21,7 @@ The installer lets you pick the install folder and adds Desktop and Start Menu s
 
 Updates: the app checks GitHub Releases for new versions and offers to install them. One-time setup and the publishing steps are in [RELEASING.md](RELEASING.md).
 
-Run the tests: `npm test`
+Run the tests: `npm test` (also checks the phone app is level with the desktop app). Check the code: `npm run lint`.
 
 ## How it works
 
@@ -43,18 +43,26 @@ Data file location: `%APPDATA%\Garage Log\garage-log.json` (a `.bak` copy is kep
 ## Layout
 
 ```
-main.js          Electron main process, file storage, dialogs
-preload.js       Safe bridge to the renderer
-lib/logic.js     Due-date and stats logic (pure, tested)
-lib/sync.js      Phone/PC sync: change tracking, merging, GitHub Gist client (shared with mobile)
-lib/carfax.js    Reads service records from pasted CARFAX text (shared with mobile)
-lib/workorder.js Reads shop work orders / invoices / receipts (shared with mobile)
-lib/car3d.js     3D car model and viewer, body style from the VIN (shared with mobile)
-lib/carlook.js   Finds the vehicle's generation, real dimensions and photo on Wikipedia (shared with mobile)
-lib/themes.js    Color themes and the Appearance picker (shared with mobile)
-lib/fuel.js      Reads gas receipts; fuel cost, yearly estimate and economy (shared with mobile)
-lib/vendor/      three.js r159 and pdf.js 3.11 (bundled, so no internet is needed)
-mobile/          Phone version (installable web app), served from GitHub Pages
-renderer/        UI (index.html, styles.css, app.js)
-test/            Logic tests
+main.js           Electron main process: file storage, dialogs, VIN and Wikipedia look-ups, updates
+preload.js        Safe bridge to the renderer
+renderer/         Desktop UI (index.html, styles.css, app.js)
+mobile/           Phone version (installable web app), served from GitHub Pages
+mobile/lib/       Generated: copies of lib/ for the phone app (npm run sync-version; not committed)
+lib/              Code shared by both apps:
+  logic.js          due dates, stats, VIN decoding (pure, tested)
+  sync.js           phone/PC sync: change tracking, merging, GitHub Gist client
+  carfax.js         reads service records from CARFAX text
+  workorder.js      reads shop work orders, invoices and receipts
+  fuel.js           reads gas receipts; fuel cost, yearly estimate and economy
+  car3d.js          the 3D car model and viewer
+  carlook.js        finds the vehicle generation, real dimensions and photo on Wikipedia
+  themes.js         color themes and the Appearance picker
+  updatebanner.js   the "new version" prompt
+  ui-car.js         the dashboard car: 3D stage, photo, background look-ups
+  ui-fuel.js        fuel form, receipt import, delete, dashboard fuel card
+  ui-import.js      PDF reading and the service-record import dialog
+  updater.js        desktop auto-update (Electron only)
+  vendor/           three.js r159 and pdf.js 3.11 (bundled, loaded when first needed)
+scripts/          Release helpers: version sync, phone-app checks and publishing
+test/             Tests (npm test runs every *.test.js)
 ```
