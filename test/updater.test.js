@@ -54,6 +54,25 @@ function make(au, extra = {}) {
     assert.equal(s.state, 'available'); assert.equal(s.latest, '1.2.0');
   });
 
+  await test('a download that fails can be tried again', async () => {
+    let fail = true;
+    const au = fakeAU({
+      check: (a) => a.emit('update-available', { version: '1.2.0' }),
+      download: (a) => {
+        if (fail) { fail = false; a.emit('error', new Error('net::ERR_CONNECTION_RESET')); throw new Error('net::ERR_CONNECTION_RESET'); }
+        a.emit('update-downloaded', { version: '1.2.0' });
+      }
+    });
+    const { u } = make(au);
+    await u.check();
+    let s = await u.download();
+    assert.equal(s.state, 'error');
+    assert.equal(s.latest, '1.2.0'); // kept, so the prompt can offer TRY AGAIN
+    assert.match(s.message, /Could not reach GitHub/);
+    s = await u.download();
+    assert.equal(s.state, 'ready');
+  });
+
   await test('download -> progress -> ready, then install is silent + relaunches', async () => {
     const au = fakeAU({ check: (a) => a.emit('update-available', { version: '1.2.0' }) });
     const { u, sent } = make(au);

@@ -4,6 +4,7 @@
   const S = window.GarageSync;
   const C = window.GarageCarfax;
   const G3 = window.GarageCar3D;
+  const U = window.GarageUpdateBanner;
   const F = window.GarageFuel;
   const TH = window.GarageThemes;
   const GL = window.GarageCarLook;
@@ -71,6 +72,7 @@
     $('#dlgFields').innerHTML = html.join('');
 
     const form = $('#dlgForm');
+    form.ondragover = form.ondragleave = form.ondrop = null; // only the fuel import takes dropped files
     form.onsubmit = (e) => {
       e.preventDefault();
       const values = {};
@@ -437,7 +439,7 @@
           .join('')}</tbody></table>`
       : `<div class="empty">Nothing logged yet.<div><button class="btn" data-action="addlog">LOG YOUR FIRST SERVICE</button></div></div>`;
 
-    return `
+    return `<div id="dashUpdate"></div>
       <div class="row"><h1 class="grow"><span class="rule"></span>${esc(v.name)}${title ? ' — ' + esc(title) : ''}</h1>
         <button class="btn ghost small" data-action="editvehicle">EDIT VEHICLE</button>
         <button class="btn" data-action="addlog">+ LOG SERVICE</button></div>
@@ -583,6 +585,7 @@
       view === 'settings' ? viewSettings() : viewDashboard(v);
     mountCar(v);
     TH.paintSwatches(main);
+    renderUpdateBar();
   }
 
   // ---------- 3D car ----------
@@ -641,25 +644,13 @@
   }
 
   // ---------- app updates ----------
+  // The main process checks on start, every 6 hours and when the window comes back into focus; the
+  // prompt (lib/updatebanner.js) sits at the top of the dashboard, or in the bar above other tabs.
   let updateState = { state: 'idle' };
-  let updateDismissed = false;
   let appVersion = '';
 
   function renderUpdateBar() {
-    const bar = $('#updateBar');
-    const s = updateState;
-    let html = '';
-    if (s.state === 'available' && !updateDismissed) {
-      html = `<span>Version ${esc(s.latest)} is available (you have ${esc(s.version)}).</span><span class="grow"></span>
-        <button class="btn small" data-action="updl">DOWNLOAD</button><button class="btn ghost small" data-action="updismiss">LATER</button>`;
-    } else if (s.state === 'downloading') {
-      html = `<span>Downloading update… ${Number(s.percent) || 0}%</span>`;
-    } else if (s.state === 'ready') {
-      html = `<span>Version ${esc(s.latest)} is ready to install. Your data is kept.</span><span class="grow"></span>
-        <button class="btn small" data-action="upinstall">RESTART &amp; INSTALL</button>`;
-    }
-    bar.innerHTML = html;
-    bar.hidden = !html;
+    U.render(updateState, localStorage, $('#updateBar'), document);
   }
 
   async function checkUpdates() {
@@ -667,7 +658,7 @@
     let s;
     try { s = await window.garage.updateCheck(); } catch { s = { state: 'error', message: 'Update check failed.' }; }
     updateState = s;
-    if (s.state === 'available') updateDismissed = false;
+    if (s.state === 'available') U.saveLater(localStorage, null); // asked on purpose: show it now
     renderUpdateBar();
     if (s.state === 'none') toast('YOU ARE ON THE LATEST VERSION');
     else if (s.state === 'available') toast('UPDATE AVAILABLE');
@@ -1005,58 +996,87 @@
       title: `Fuel receipts · ${v.name}`,
       fields: [{ name: 'text', label: 'Or paste the receipt text', type: 'textarea' }],
       okLabel: 'READ IT',
-      onSubmit: (f) => (f.text ? readFuel(v, f.text) : 'Paste a receipt, or open a PDF.')
+      onSubmit: (f) => (f.text ? readFuel(v, F.parseReceipts(f.text)) : 'Paste a receipt, or open PDFs.')
     });
-    $('#f_text').rows = 7;
-    $('#dlgFields').insertAdjacentHTML('afterbegin', `<p class="hint">Gas station receipts: the paper slip, an emailed receipt
-      or a PDF. The app reads the date, ${volName(v)}s, price and total, and you check them before anything is saved.
-      Paste several receipts at once to add them together.</p>
-      <div class="import-pdf"><button type="button" class="btn" id="pdfBtn">OPEN A PDF</button>
-        <input type="file" id="pdfFile" accept="application/pdf,.pdf" hidden></div>
+    $('#f_text').rows = 6;
+    $('#dlgFields').insertAdjacentHTML('afterbegin', `<p class="hint">Gas station receipts: PDFs (pick as many as you like at once${'ontouchstart' in window ? '' : ', or drag them onto this window'}),
+      an emailed receipt, or the paper slip. The app reads the date, ${volName(v)}s, price and total, and you check them before anything is saved.</p>
+      <div class="import-pdf"><button type="button" class="btn" id="pdfBtn">OPEN PDFs</button>
+        <span class="dim" id="pdfStatus"></span>
+        <input type="file" id="pdfFile" accept="application/pdf,.pdf" multiple hidden></div>
       <p class="hint">For a paper receipt, point your phone's camera at it and copy the text with Live Text (iPhone) or Google Lens (Android), then paste it here.</p>`);
     const btn = $('#pdfBtn');
     const input = $('#pdfFile');
     btn.onclick = () => { input.value = ''; input.click(); };
-    input.onchange = async () => {
-      const file = input.files && input.files[0];
-      if (!file) return;
-      const err = $('#dlgError');
-      btn.disabled = true;
-      btn.textContent = 'READING…';
-      err.textContent = '';
-      try {
-        const text = await pdfText(file);
-        $('#f_text').value = text;
-        const problem = readFuel(v, text);
-        if (problem) err.textContent = problem;
-        else $('#dlg').close();
-      } catch (e) {
-        err.textContent = 'Could not read that PDF' + (e && e.message ? ': ' + e.message : '.');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'OPEN A PDF';
-      }
+    input.onchange = () => readFuelPdfs(v, [...(input.files || [])]);
+    // drop PDFs anywhere on the dialog
+    const form = $('#dlgForm');
+    form.ondragover = (e) => { e.preventDefault(); form.classList.add('drop'); };
+    form.ondragleave = () => form.classList.remove('drop');
+    form.ondrop = (e) => {
+      e.preventDefault();
+      form.classList.remove('drop');
+      readFuelPdfs(v, [...(e.dataTransfer.files || [])]);
     };
   }
 
+  // Many receipt PDFs at once: read each, then one review of everything found.
+  async function readFuelPdfs(v, files) {
+    const pdfs = files.filter((f) => /\.pdf$/i.test(f.name) || f.type === 'application/pdf');
+    if (!pdfs.length) return;
+    const btn = $('#pdfBtn');
+    const status = $('#pdfStatus');
+    const err = $('#dlgError');
+    btn.disabled = true;
+    err.textContent = '';
+    const fills = [];
+    const unreadable = [];
+    for (let i = 0; i < pdfs.length; i++) {
+      status.textContent = `reading ${i + 1} of ${pdfs.length}…`;
+      try {
+        const found = F.parseReceipts(await pdfText(pdfs[i]));
+        if (found.length) fills.push(...found.map((r) => ({ ...r, file: pdfs[i].name })));
+        else unreadable.push(pdfs[i].name);
+      } catch {
+        unreadable.push(pdfs[i].name);
+      }
+    }
+    btn.disabled = false;
+    status.textContent = '';
+    const note = unreadable.length
+      ? `${unreadable.length} file${unreadable.length === 1 ? '' : 's'} had no receipt text (a scanned picture, or not a fuel receipt): ${unreadable.join(', ')}.`
+      : '';
+    if (!fills.length) { err.textContent = note || "Couldn't find a fuel purchase in those PDFs."; return; }
+    const problem = readFuel(v, fills, note);
+    if (problem) err.textContent = problem + (note ? ' ' + note : '');
+    else $('#dlg').close();
+  }
+
   // One receipt opens in the fill-up form to check; several are listed, then added together.
+  // receipts: from F.parseReceipts. note: anything to mention about files that couldn't be read.
   // Returns an error message, or nothing.
-  function readFuel(v, text) {
-    const fills = F.parseReceipts(text).map((r) => F.toFillUp(r, v, today()));
+  function readFuel(v, receipts, note) {
+    const fills = receipts.map((r) => F.toFillUp(r, v, today()));
     if (!fills.length) return `Couldn't find a fuel purchase in that. It needs at least the total, or the ${volName(v)}s and price.`;
-    const have = new Set(fuelFor(v).map((f) => f.date + '|' + Number(f.total).toFixed(2)));
-    const fresh = fills.filter((f) => !have.has(f.date + '|' + Number(f.total).toFixed(2)));
+    const key = (f) => f.date + '|' + Number(f.total).toFixed(2);
+    const have = new Set(fuelFor(v).map(key));
+    const fresh = [];
+    for (const f of fills) if (!have.has(key(f))) { have.add(key(f)); fresh.push(f); } // also drops the same PDF picked twice
     if (!fresh.length) return 'Those receipts are already in the fuel log.';
-    if (fresh.length === 1) { setTimeout(() => fuelForm(null, fresh[0]), 80); return; }
+    if (fresh.length === 1 && !note) { setTimeout(() => fuelForm(null, fresh[0]), 80); return; }
+    fresh.sort((a, b) => (a.date < b.date ? -1 : 1));
     const sum = fresh.reduce((s, f) => s + (f.total || 0), 0);
-    const list = fresh.map((f) => `${f.date} ${f.station || 'fuel'} ${money(f.total)}${f.volume ? ` (${fmtVol(f.volume)} ${volAbbr(v)})` : ''}`).join(' · ');
+    const shown = fresh.slice(0, 12).map((f) => `${f.date} ${f.station || 'fuel'} ${money(f.total)}`).join(' · ');
+    const more = fresh.length > 12 ? ` · and ${fresh.length - 12} more` : '';
     const skipped = fills.length - fresh.length;
-    setTimeout(() => confirmDialog(`Add ${fresh.length} fill-ups?`,
-      `${money(sum)} in all: ${list}.${skipped ? ` ${skipped} already in the log, skipped.` : ''}`, `ADD ${fresh.length}`, () => {
+    setTimeout(() => confirmDialog(`Add ${fresh.length} fill-up${fresh.length === 1 ? '' : 's'}?`,
+      `${money(sum)} in all, ${fresh[0].date} to ${fresh[fresh.length - 1].date}: ${shown}${more}.` +
+      `${skipped ? ` ${skipped} already in the log, skipped.` : ''}${note ? ' ' + note : ''} You can edit any of them afterwards on the Fuel tab.`,
+      `ADD ${fresh.length}`, () => {
         for (const f of fresh) data.fuel.push({ id: uid(), ...f });
         v.odometer = L.highestOdometer(v, [...data.logs, ...data.fuel]);
         persist(); render();
-        toast(`${fresh.length} FILL-UPS ADDED`);
+        toast(`${fresh.length} FILL-UP${fresh.length === 1 ? '' : 'S'} ADDED`);
       }), 80);
   }
 
@@ -1086,6 +1106,10 @@
         <span class="fuel-btns"><button class="btn small" data-action="addfuel">+ FILL-UP</button>
           <button class="btn ghost small" data-action="importfuel">IMPORT</button></span></div></div>`;
   }
+
+  // A file dropped anywhere else must not replace the app with it.
+  document.addEventListener('dragover', (e) => e.preventDefault());
+  document.addEventListener('drop', (e) => e.preventDefault());
 
   const actions = {
     import: importRecords,
@@ -1133,7 +1157,7 @@
     checkupdate: checkUpdates,
     carphoto: () => { carPhoto = !carPhoto; render(); },
     updl: () => window.garage.updateDownload(),
-    updismiss: () => { updateDismissed = true; renderUpdateBar(); },
+    updismiss: () => { U.saveLater(localStorage, updateState.latest); renderUpdateBar(); },
     upinstall: () => window.garage.updateInstall()
   };
 

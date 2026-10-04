@@ -52,7 +52,7 @@ function createWindow() {
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith('file:')) e.preventDefault();
+    if (url !== win.webContents.getURL()) e.preventDefault(); // e.g. a PDF dropped on the window
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 }
@@ -177,8 +177,13 @@ function initUpdater() {
       : 'Updates only work in the installed app (not when run with npm start).',
     send: (s) => BrowserWindow.getAllWindows().forEach((w) => { if (!w.isDestroyed()) w.webContents.send('update:state', s); })
   });
-  setTimeout(() => updater.check({ silent: true }), 5000);
-  setInterval(() => updater.check({ silent: true }), 6 * 60 * 60 * 1000);
+  // Look for updates on start, every 6 hours, and when the user comes back to the window (at most
+  // hourly), so the dashboard can prompt without anyone opening the Data tab.
+  let lastCheck = 0;
+  const background = () => { lastCheck = Date.now(); updater.check({ silent: true }); };
+  setTimeout(background, 5000);
+  setInterval(background, 6 * 60 * 60 * 1000);
+  app.on('browser-window-focus', () => { if (Date.now() - lastCheck > 60 * 60 * 1000) background(); });
 }
 
 ipcMain.handle('app:version', () => app.getVersion());

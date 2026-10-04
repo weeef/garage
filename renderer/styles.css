@@ -162,11 +162,6 @@ a.link { color: var(--accent); }
 .vin-status.err { color: var(--over); }
 
 /* update bar */
-.update-bar { display: flex; align-items: center; gap: 10px; padding: 8px 22px; background: var(--accent); color: var(--on-accent); font-size: 13px; }
-.update-bar[hidden] { display: none; }
-.update-bar .grow { flex: 1; }
-.update-bar .btn { background: var(--on-accent); color: var(--accent); border-color: var(--on-accent); }
-.update-bar .btn.ghost { background: transparent; color: var(--on-accent); border-color: var(--on-accent); }
 
 /* CARFAX import preview */
 .cfx-list { max-height: 50vh; overflow-y: auto; border: 1px solid var(--line); }
@@ -258,3 +253,18 @@ input[type=color] { height: 34px; padding: 2px 4px; cursor: pointer; }
 .fuel-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: var(--dim); font-size: 12px; }
 .fuel-btns { display: flex; gap: 8px; flex-wrap: wrap; }
 .empty-fuel .fuel-btns { margin-top: 10px; }
+
+/* update prompt (lib/updatebanner.js): top of the dashboard, or a slim bar above other tabs */
+.upd-banner { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; padding: 12px 16px; margin-bottom: 14px;
+  background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); }
+.upd-banner b { letter-spacing: 1px; text-transform: uppercase; margin-right: 4px; }
+.upd-text { flex: 1; min-width: 220px; font-size: 13px; line-height: 1.4; }
+.upd-btns { display: flex; gap: 8px; }
+.upd-banner .btn { background: var(--on-accent); color: var(--accent); border-color: var(--on-accent); }
+.upd-banner .btn.ghost { background: transparent; color: var(--on-accent); border-color: var(--on-accent); }
+.upd-progress { display: block; height: 4px; margin-top: 6px; background: rgba(127, 127, 127, 0.35); }
+.upd-progress i { display: block; height: 100%; width: 0; background: var(--on-accent); transition: width 0.3s; }
+.update-bar { padding: 0; background: none; display: block; }
+.update-bar[hidden] { display: none; }
+.update-bar .upd-banner { margin: 0; padding: 8px 16px; }
+#dlgForm.drop { outline: 2px dashed var(--accent); outline-offset: -6px; }
