@@ -4,6 +4,7 @@
   const S = window.GarageSync;
   const C = window.GarageCarfax;
   const G3 = window.GarageCar3D;
+  const TH = window.GarageThemes;
   const GL = window.GarageCarLook;
   const W = window.GarageWorkOrder;
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -502,6 +503,8 @@
   function viewSettings() {
     return `<div class="row"><h1 class="grow"><span class="rule"></span>Data</h1></div>
       <div class="data-cards">
+        <div class="card wide"><h3>Appearance</h3><p>Colors and style for this PC. Pick a theme, then change the accent color if you like.</p>
+          ${TH.pickerHtml(TH.load(localStorage), (vehicle() || {}).make)}</div>
         <div class="card"><h3>Backup</h3><p>Save everything (all vehicles, logs and schedules) to a JSON file.</p>
           <button class="btn" data-action="backup">EXPORT BACKUP</button></div>
         <div class="card"><h3>Restore</h3><p>Replace all current data with a backup file. This overwrites what is here now.</p>
@@ -543,6 +546,7 @@
       view === 'schedules' ? viewSchedules(v) :
       view === 'settings' ? viewSettings() : viewDashboard(v);
     mountCar(v);
+    TH.paintSwatches(main);
   }
 
   // ---------- 3D car ----------
@@ -886,8 +890,27 @@
       <button class="btn ghost" data-action="syncoff">DISCONNECT</button></div>`;
   }
 
+  // ---------- appearance ----------
+  // Themes are a per-device preference (lib/themes.js), applied live; the settings card is re-drawn
+  // so the selected swatch moves.
+  function setTheme(prefs) {
+    TH.save(localStorage, prefs);
+    TH.apply(document, TH.load(localStorage));
+    render();
+  }
+
+  document.addEventListener('input', (e) => {
+    if (e.target.id !== 'accentPick') return;
+    const prefs = { ...TH.load(localStorage), accent: e.target.value };
+    TH.save(localStorage, prefs);
+    TH.apply(document, prefs); // live while dragging; the card is re-drawn on 'change'
+  });
+  document.addEventListener('change', (e) => { if (e.target.id === 'accentPick') render(); });
+
   const actions = {
     import: importRecords,
+    theme: (id) => setTheme({ id }),
+    accentreset: () => setTheme({ ...TH.load(localStorage), accent: '' }),
     syncon: connectSync,
     syncnow: () => runSync(true),
     syncoff: disconnectSync,

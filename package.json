@@ -1,18 +1,18 @@
 {
   "name": "garage-log",
   "productName": "Garage Log",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Vehicle maintenance log: track services, schedules and costs for any vehicle.",
   "author": "Jordan Bastian",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node test/logic.test.js && node test/updater.test.js && node test/sync.test.js && node test/carfax.test.js && node test/car3d.test.js && node test/carlook.test.js && node test/workorder.test.js",
+    "test": "node scripts/check-mobile.js && node test/logic.test.js && node test/updater.test.js && node test/sync.test.js && node test/carfax.test.js && node test/car3d.test.js && node test/carlook.test.js && node test/themes.test.js && node test/workorder.test.js",
     "sync-version": "node scripts/sync-version.js",
     "set-repo": "node scripts/set-repo.js",
     "publish-mobile": "node scripts/publish-mobile.js",
-    "dist": "npm run sync-version && electron-builder --win --x64 --publish never",
-    "release": "npm run sync-version && electron-builder --win --x64 --publish always && node scripts/publish-mobile.js"
+    "dist": "npm run sync-version && node scripts/check-mobile.js && electron-builder --win --x64 --publish never",
+    "release": "npm run sync-version && node scripts/check-mobile.js && npm test && electron-builder --win --x64 --publish always && node scripts/publish-mobile.js"
   },
   "build": {
     "appId": "com.jordanbastian.garagelog",

@@ -1,7 +1,7 @@
 // Runs before every build/release. Makes package.json's version the single source of truth:
 //  - writes mobile/version.json
 //  - sets the mobile service-worker cache name to garage-log-<version> (a new name = phones pick up the update)
-//  - keeps mobile/logic.js, sync.js, carfax.js, car3d.js, carlook.js and vendor/three.min.js identical to their lib/ originals
+//  - copies every shared lib/ file (all but the Electron-only ones) into mobile/, so the phone app matches
 const fs = require('fs');
 const path = require('path');
 const root = path.join(__dirname, '..');
@@ -18,9 +18,9 @@ if (next === sw && !sw.includes(`garage-log-${version}`)) {
 }
 fs.writeFileSync(swPath, next);
 
+// Every lib/ file is shared with the phone app except the Electron-only ones, so a new shared file
+// can't be forgotten. scripts/check-mobile.js then makes sure the phone app actually loads it.
+const { sharedFiles } = require('./check-mobile');
 fs.mkdirSync(path.join(root, 'mobile', 'vendor'), { recursive: true });
-for (const f of ['logic.js', 'sync.js', 'carfax.js', 'workorder.js', 'car3d.js', 'carlook.js', 'vendor/three.min.js', 'vendor/three.LICENSE.txt',
-  'vendor/pdf.min.js', 'vendor/pdf.worker.min.js', 'vendor/pdfjs.LICENSE.txt']) {
-  fs.copyFileSync(path.join(root, 'lib', f), path.join(root, 'mobile', f));
-}
+for (const f of sharedFiles()) fs.copyFileSync(path.join(root, 'lib', f), path.join(root, 'mobile', f));
 console.log(`Synced version ${version} (mobile/version.json, mobile/sw.js, shared lib files)`);
