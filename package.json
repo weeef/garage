@@ -1,0 +1,67 @@
+{
+  "name": "garage-log",
+  "productName": "Garage Log",
+  "version": "1.1.0",
+  "description": "Vehicle maintenance log: track services, schedules and costs for any vehicle.",
+  "author": "Jordan Bastian",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/logic.test.js && node test/updater.test.js",
+    "sync-version": "node scripts/sync-version.js",
+    "set-repo": "node scripts/set-repo.js",
+    "dist": "npm run sync-version && electron-builder --win --x64 --publish never",
+    "release": "npm run sync-version && electron-builder --win --x64 --publish always"
+  },
+  "build": {
+    "appId": "com.jordanbastian.garagelog",
+    "productName": "Garage Log",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**",
+      "renderer/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Garage Log",
+      "artifactName": "Garage-Log-Setup-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "weeef",
+        "repo": "garage",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  }
+}

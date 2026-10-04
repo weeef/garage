@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Garage Log</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="mark">▞</span> GARAGE<b>LOG</b></div>
+    <div class="vehicle-pick">
+      <label for="vehicleSelect">VEHICLE</label>
+      <select id="vehicleSelect"></select>
+      <button id="addVehicleBtn" class="btn ghost" title="Add a vehicle">+ NEW</button>
+    </div>
+    <nav id="nav">
+      <button data-view="dashboard" class="active">DASHBOARD</button>
+      <button data-view="log">SERVICE LOG</button>
+      <button data-view="schedules">SCHEDULES</button>
+      <button data-view="settings">DATA</button>
+    </nav>
+  </header>
+
+  <div id="updateBar" class="update-bar" hidden></div>
+
+  <main id="main"></main>
+
+  <dialog id="dlg">
+    <form method="dialog" id="dlgForm" autocomplete="off">
+      <h2 id="dlgTitle"></h2>
+      <div id="dlgFields"></div>
+      <div id="dlgError" class="error" role="alert"></div>
+      <menu>
+        <button type="button" id="dlgCancel" class="btn ghost">CANCEL</button>
+        <button type="submit" id="dlgOk" class="btn">SAVE</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <div id="toast" role="status"></div>
+
+  <script src="../lib/logic.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
