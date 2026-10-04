@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('garage', {
   importJson: () => ipcRenderer.invoke('file:importJson'),
   decodeVin: (vin) => ipcRenderer.invoke('vin:decode', vin),
   getVersion: () => ipcRenderer.invoke('app:version'),
+  getSyncConfig: () => ipcRenderer.invoke('sync:getConfig'),
+  setSyncConfig: (cfg) => ipcRenderer.invoke('sync:setConfig', cfg),
   updateState: () => ipcRenderer.invoke('update:state'),
   updateCheck: () => ipcRenderer.invoke('update:check'),
   updateDownload: () => ipcRenderer.invoke('update:download'),

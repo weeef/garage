@@ -1,10 +1,14 @@
 (() => {
   'use strict';
   const L = window.GarageLogic;
+  const S = window.GarageSync;
+  const C = window.GarageCarfax;
   const $ = (sel, root = document) => root.querySelector(sel);
 
   const DATA_KEY = 'garage-log-v1';
   const UI_KEY = 'garage-log-ui';
+  const SYNC_KEY = 'garage-log-sync';
+  const clone = (x) => JSON.parse(JSON.stringify(x));
 
   let data = { vehicles: [], logs: [], schedules: [] };
   let vehicleId = null;
@@ -19,7 +23,7 @@
   const uid = () =>
     (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
   const today = () => L.formatDate(new Date());
-  const fmtInt = (n) => Math.round(n).toLocaleString('en-US');
+  const fmtInt = (n) => (n == null || !Number.isFinite(Number(n)) ? '—' : Math.round(n).toLocaleString('en-US'));
   const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const vehicle = () => data.vehicles.find((v) => v.id === vehicleId) || null;
   const unit = (v) => (v && v.unit === 'km' ? 'km' : 'mi');
@@ -37,15 +41,24 @@
     }
   }
 
-  function persist() {
+  let saved = null; // copy of data as last saved, to work out what changed (for sync)
+  function writeData() {
     try {
       localStorage.setItem(DATA_KEY, JSON.stringify(data));
-      savePrefs();
       return true;
     } catch {
       toast('COULD NOT SAVE: storage full or blocked');
       return false;
     }
+  }
+
+  function persist() {
+    S.stampChanges(saved, data, Date.now());
+    saved = clone(data);
+    const ok = writeData();
+    savePrefs();
+    syncSoon();
+    return ok;
   }
 
   function savePrefs() {
@@ -491,7 +504,8 @@
       ? `<div class="cards">${rows.map(logCardHtml.bind(null, v, true)).join('')}</div>`
       : `<div class="empty">No service history yet.</div>`;
     return `<div class="row"><h1><span class="rule"></span>Service log · ${rows.length}</h1>
-      <button class="btn ghost small" data-action="csv">EXPORT CSV</button></div>${body}`;
+      <button class="btn ghost small" data-action="carfax">CARFAX</button>
+      <button class="btn ghost small" data-action="csv">CSV</button></div>${body}`;
   }
 
   function viewDue(v) {
@@ -526,6 +540,9 @@
           <div class="btns left"><button class="btn" data-action="backup">EXPORT BACKUP</button></div></div>
         <div class="card"><h3>Restore</h3><p>Replace all data here with a backup file (from this app or the desktop app).</p>
           <div class="btns left"><button class="btn ghost" data-action="restore">IMPORT BACKUP</button></div></div>
+        ${syncCard()}
+        <div class="card"><h3>Import from CARFAX</h3><p>Pull this vehicle's service history in from CARFAX by copying and pasting it. You pick what gets added.</p>
+          <div class="btns left"><button class="btn ghost" data-action="carfax">IMPORT CARFAX HISTORY</button></div></div>
         <div class="card"><h3>App updates</h3><p>Version ${esc(appVersion || '…')}. The app updates itself when a new version is published; you'll be asked to reload.</p>
           <div class="btns left"><button class="btn ghost" data-action="checkupdate">CHECK FOR UPDATES</button></div></div>
         <div class="card"><h3>Current vehicle</h3><p>Edit details, or delete it with all of its history.</p>
@@ -533,7 +550,9 @@
             <button class="btn danger" data-action="delvehicle">DELETE</button></div></div>
         ${installCard()}
       </div>
-      <p class="hint">Your data lives only in this browser on this device. Clearing site data deletes it, so export a backup now and then.</p>`;
+      <p class="hint">${sync.token
+        ? 'Your data is stored on this device and synced to a private gist on your GitHub account, so the PC app has a copy too.'
+        : 'Your data lives only in this browser on this device. Clearing site data deletes it, so turn on sync or export a backup now and then.'}</p>`;
   }
 
   function viewWelcome() {
@@ -628,6 +647,142 @@
       });
   });
 
+  // ---------- CARFAX import ----------
+  function importCarfax() {
+    const v = vehicle();
+    if (!v) return;
+    openForm({
+      title: `CARFAX · ${v.name}`,
+      fields: [{ name: 'text', label: 'Paste here', type: 'textarea', required: true }],
+      okLabel: 'READ IT',
+      onSubmit: (f) => {
+        const entries = C.toEntries(C.parseCarfax(f.text), v, data.logs);
+        if (!entries.length) return 'No service records found. Copy the whole CARFAX page and paste it here.';
+        setTimeout(() => previewCarfax(v, entries), 80);
+      }
+    });
+    $('#f_text').rows = 8;
+    $('#dlgFields').insertAdjacentHTML('afterbegin', `<p class="hint">Open this vehicle's <b>Service History</b> at carfax.com
+      (CARFAX Car Care) or a CARFAX report in your browser. Select all the text and copy it (on a PC: Ctrl+A, Ctrl+C), then paste
+      below. You'll see what was found before anything is saved.</p>`);
+  }
+
+  function previewCarfax(v, entries) {
+    const dupes = entries.filter((e) => e.duplicate).length;
+    openForm({
+      title: 'Pick what to import',
+      fields: [],
+      okLabel: 'IMPORT',
+      onSubmit: () => {
+        const picked = [...document.querySelectorAll('#dlgFields input[data-i]:checked')].map((el) => entries[Number(el.dataset.i)]);
+        if (!picked.length) return 'Tick at least one entry.';
+        for (const { duplicate, ...entry } of picked) data.logs.push({ id: uid(), ...entry });
+        v.odometer = L.highestOdometer(v, data.logs);
+        persist(); render();
+        toast(`${picked.length} ${picked.length === 1 ? 'ENTRY' : 'ENTRIES'} IMPORTED`);
+      }
+    });
+    $('#dlgFields').innerHTML = `<p class="hint">Found ${entries.length} service ${entries.length === 1 ? 'entry' : 'entries'}${
+      dupes ? `, ${dupes} already logged (unticked)` : ''}. Costs aren't in CARFAX, so they import as $0.</p>
+      <div class="cfx-list">${entries.map((e, i) => `<label class="cfx-row${e.duplicate ? ' dup' : ''}">
+        <input type="checkbox" data-i="${i}" ${e.duplicate ? '' : 'checked'}>
+        <span class="s">${esc(e.service)}${e.duplicate ? ' <em>already logged</em>' : ''}</span>
+        <span class="meta">${esc(e.date)} · ${fmtInt(e.odometer)} ${unit(v)}
+          <small>${esc(e.notes.replace(/^Imported from CARFAX( · )?/, ''))}</small></span></label>`).join('')}</div>`;
+  }
+
+  // ---------- PC sync (private GitHub Gist, see sync.js) ----------
+  const NO_SYNC = { token: '', gistId: null, lastSync: 0 };
+  let sync = { ...NO_SYNC };
+  let syncing = false;
+  let syncAgain = false;
+  let syncTimer = null;
+  let syncError = '';
+
+  function loadSync() {
+    try { return { ...NO_SYNC, ...(JSON.parse(localStorage.getItem(SYNC_KEY)) || {}) }; } catch { return { ...NO_SYNC }; }
+  }
+  function saveSync() {
+    try {
+      if (sync.token) localStorage.setItem(SYNC_KEY, JSON.stringify(sync));
+      else localStorage.removeItem(SYNC_KEY);
+    } catch { /* storage blocked */ }
+  }
+
+  function syncSoon(delay = 3000) {
+    if (!sync.token) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => runSync(false), delay);
+  }
+
+  async function runSync(manual) {
+    if (!sync.token) return;
+    if (syncing) { syncAgain = true; return; }
+    syncing = true;
+    if (manual) toast('SYNCING…');
+    try {
+      const r = await S.syncNow({ token: sync.token, gistId: sync.gistId, local: clone(data) });
+      const merged = S.mergeData(data, r.data); // keep anything edited while we were waiting on GitHub
+      sync = { ...sync, gistId: r.gistId, lastSync: Date.now() };
+      syncError = '';
+      saveSync();
+      if (!S.sameData(merged, data)) {
+        data = merged;
+        saved = clone(data);
+        writeData();
+        if (!data.vehicles.some((v) => v.id === vehicleId)) vehicleId = data.vehicles[0]?.id || null;
+        if (!manual) toast('UPDATED FROM YOUR PC');
+      }
+      if (!$('#dlg').open) render();
+      if (manual) toast('SYNCED');
+    } catch (e) {
+      syncError = e.message || 'Sync failed.';
+      if (!sync.lastSync && !sync.gistId) sync = { ...NO_SYNC }; // first connect failed: don't keep a bad token
+      if (manual) toast(syncError);
+      if (!$('#dlg').open) render();
+    } finally {
+      syncing = false;
+      if (syncAgain) { syncAgain = false; syncSoon(500); }
+    }
+  }
+
+  function connectSync() {
+    openForm({
+      title: 'Sync with the PC app',
+      fields: [{ name: 'token', label: 'GitHub token', type: 'password', required: true, placeholder: 'ghp_…' }],
+      okLabel: 'CONNECT',
+      onSubmit: (f) => {
+        sync = { token: f.token, gistId: null, lastSync: 0 };
+        runSync(true);
+      }
+    });
+    $('#dlgFields').insertAdjacentHTML('afterbegin', `<p class="hint">Paste the same GitHub token you used in the PC app
+      (a token with only the <b>gist</b> box ticked, from github.com/settings/tokens/new). Data already on this phone and on
+      the PC is merged, not replaced.</p>`);
+  }
+
+  function disconnectSync() {
+    confirmDialog('Stop syncing?', 'This phone stops syncing. Everything stays here and on the PC; you can reconnect any time.', 'DISCONNECT', () => {
+      clearTimeout(syncTimer);
+      sync = { ...NO_SYNC };
+      syncError = '';
+      saveSync();
+      render();
+    });
+  }
+
+  function syncCard() {
+    if (!sync.token) {
+      return `<div class="card"><h3>PC sync</h3><p>Keep this phone and the PC app in step. Changes on either one show up on the other.</p>
+        <div class="btns left"><button class="btn" data-action="syncon">CONNECT</button></div></div>`;
+    }
+    const when = sync.lastSync ? new Date(sync.lastSync).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'not yet';
+    return `<div class="card"><h3>PC sync</h3><p>On. Changes sync automatically. Last synced: ${esc(when)}.
+      ${syncError ? `<br><span class="sync-err">${esc(syncError)}</span>` : ''}</p>
+      <div class="btns left"><button class="btn" data-action="syncnow">SYNC NOW</button>
+        <button class="btn ghost" data-action="syncoff">DISCONNECT</button></div></div>`;
+  }
+
   // ---------- app updates ----------
   // New versions arrive as a new service worker. It installs and activates by itself; since this page is
   // still running the old code, we show a bar asking the user to reload when it takes over.
@@ -675,6 +830,10 @@
 
   // ---------- events ----------
   const actions = {
+    carfax: importCarfax,
+    syncon: connectSync,
+    syncnow: () => runSync(true),
+    syncoff: disconnectSync,
     addvehicle: addVehicle,
     editvehicle: editVehicle,
     delvehicle: deleteVehicle,
@@ -723,6 +882,8 @@
   // ---------- init ----------
   checkStorage();
   data = loadData();
+  saved = clone(data);
+  sync = loadSync();
   const prefs = loadPrefs();
   vehicleId = data.vehicles.find((v) => v.id === prefs.vehicleId)?.id || data.vehicles[0]?.id || null;
   if (['home', 'log', 'due', 'data'].includes(prefs.view)) view = prefs.view;
@@ -732,6 +893,13 @@
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch { /* ignore */ }
 
   setupUpdates();
+
+  // Sync on open, when coming back to the app, and every few minutes while it's open.
+  runSync(false);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && Date.now() - sync.lastSync > 30000) syncSoon(0);
+  });
+  setInterval(() => { if (document.visibilityState === 'visible') runSync(false); }, 5 * 60 * 1000);
 
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
     window.addEventListener('load', () => {

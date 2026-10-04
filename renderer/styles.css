@@ -163,3 +163,14 @@ a.link { color: var(--accent); }
 .update-bar .grow { flex: 1; }
 .update-bar .btn { background: #111; color: var(--accent); border-color: #111; }
 .update-bar .btn.ghost { background: transparent; color: #111; border-color: #111; }
+
+/* CARFAX import preview */
+.cfx-list { max-height: 50vh; overflow-y: auto; border: 1px solid var(--line); }
+.cfx-row { display: grid; grid-template-columns: auto 92px 92px 1fr; gap: 10px; align-items: start; padding: 8px 10px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; }
+.cfx-row:last-child { border-bottom: 0; }
+.cfx-row .d, .cfx-row .o { color: var(--dim); white-space: nowrap; }
+.cfx-row .o { text-align: right; }
+.cfx-row small { display: block; color: var(--dim); font-size: 11px; margin-top: 2px; }
+.cfx-row em { color: var(--soon); font-style: normal; font-size: 11px; }
+.cfx-row.dup .s { color: var(--dim); }
+.sync-err { color: var(--over); }

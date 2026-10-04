@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self' https://vpic.nhtsa.dot.gov">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self' https://vpic.nhtsa.dot.gov https://api.github.com https://gist.githubusercontent.com">
   <meta name="theme-color" content="#0e0e0c">
   <meta name="color-scheme" content="dark">
   <meta name="mobile-web-app-capable" content="yes">
@@ -55,6 +55,8 @@
   <div id="toast" role="status"></div>
 
   <script src="logic.js"></script>
+  <script src="sync.js"></script>
+  <script src="carfax.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

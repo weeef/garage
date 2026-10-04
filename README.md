@@ -30,9 +30,11 @@ Run the tests: `npm test`
 - **Schedules**: "every X miles and/or Y months". A schedule matches log entries by name, so logging "Oil & filter change" resets its countdown. Whichever limit hits first sets the status: ok, soon (within 10% of the interval or 30 days), overdue.
 - **VIN lookup**: type or paste a VIN when adding a vehicle and the year, make and model fill in automatically (free NHTSA database, needs internet; you can always fill details by hand). A VIN whose check digit doesn't match gets a warning, in case of a typo.
 - **Dashboard**: odometer, total spend, last 12 months, cost per mile, what's due, recent work.
+- **CARFAX import**: Service log > Import CARFAX. Copy your vehicle's service history from carfax.com (Ctrl+A, Ctrl+C) and paste it in; you get a preview of the records found, mapped onto your schedule names, and pick what to add.
+- **Phone sync**: Data > Phone sync. Connect the desktop and phone apps with the same GitHub token (gist permission only); they sync through a private gist on your account and merge changes from both sides.
 - **Data tab**: JSON backup and restore, app version and Check for updates.
 
-Data file location: `%APPDATA%\Garage Log\garage-log.json` (a `.bak` copy is kept on each save).
+Data file location: `%APPDATA%\Garage Log\garage-log.json` (a `.bak` copy is kept on each save). Sync settings are in `sync.json` next to it, with the token encrypted by Windows.
 
 ## Layout
 
@@ -40,6 +42,9 @@ Data file location: `%APPDATA%\Garage Log\garage-log.json` (a `.bak` copy is kep
 main.js          Electron main process, file storage, dialogs
 preload.js       Safe bridge to the renderer
 lib/logic.js     Due-date and stats logic (pure, tested)
+lib/sync.js      Phone/PC sync: change tracking, merging, GitHub Gist client (shared with mobile)
+lib/carfax.js    Reads service records from pasted CARFAX text (shared with mobile)
+mobile/          Phone version (installable web app), served from GitHub Pages
 renderer/        UI (index.html, styles.css, app.js)
 test/            Logic tests
 ```

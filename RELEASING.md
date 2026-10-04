@@ -27,7 +27,7 @@ Garage Log updates itself from **GitHub Releases**. You publish a new version on
    - **One command** (needs the token from step 4): `npm run release`. It builds the installer and publishes the release for you.
    - **By hand:** `npm run dist`, then on GitHub go to Releases > Draft a new release. Use the tag `v<version>` (e.g. `v1.2.0`, matching package.json), attach these three files from `dist\`, and click **Publish release** (not "Save draft"):
      `Garage-Log-Setup-<version>.exe`, `Garage-Log-Setup-<version>.exe.blockmap`, `latest.yml`
-3. Publish the phone app: upload the contents of the `mobile` folder to your host, overwriting the old files. (`npm run dist` / `release` already refresh `mobile/version.json` and the cache name; you can also run `npm run sync-version` yourself.)
+3. Publish the phone app: `npm run release` already does this (it runs `npm run publish-mobile`, which pushes the `mobile` folder to the `gh-pages` branch served at https://weeef.github.io/garage/). If you published the desktop app by hand, run `npm run publish-mobile` yourself.
 
 ## What users see
 

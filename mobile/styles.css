@@ -198,3 +198,14 @@ menu .btn { flex: 1; }
 .banner.update { background: var(--accent); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .banner.update[hidden] { display: none; }
 .banner.update .btn { background: #111; color: var(--accent); border-color: #111; }
+
+/* CARFAX import preview */
+.cfx-list { max-height: 48vh; overflow-y: auto; border: 1px solid var(--line); -webkit-overflow-scrolling: touch; }
+.cfx-row { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.cfx-row:last-child { border-bottom: 0; }
+.cfx-row input { grid-row: span 2; width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--accent); }
+.cfx-row .meta { color: var(--dim); font-size: 12px; }
+.cfx-row small { display: block; color: var(--dim); font-size: 11px; margin-top: 2px; }
+.cfx-row em { color: var(--soon); font-style: normal; font-size: 11px; }
+.cfx-row.dup .s { color: var(--dim); }
+.sync-err { color: var(--over); }

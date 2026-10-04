@@ -24,16 +24,26 @@ Open `http://localhost:8080` in a desktop browser (device toolbar at phone size)
 
 Typing or pasting a VIN when adding a vehicle fills in the year, make and model using the free NHTSA vPIC database. It needs a connection and calls `vpic.nhtsa.dot.gov` directly from the page, so if your host sets its own Content-Security-Policy header, allow that address under `connect-src`. Offline or if the service is down, you just fill the details in by hand.
 
-## Moving data between desktop and phone
+## Syncing with the desktop app
 
-Both apps use the same JSON backup format. In either app: **Data > Export backup**, then **Import backup** in the other. Importing replaces everything in the app you import into.
+**Data > PC sync > Connect** in the phone app and **Data > Phone sync > Connect** in the desktop app, using the same GitHub token (create one at github.com/settings/tokens/new with only the **gist** box ticked). The apps keep a copy in a private gist on that GitHub account and merge changes item by item, so edits made on both devices while apart all survive. Sync runs when the app opens, a few seconds after each change, and every few minutes. The logic lives in `sync.js` (a copy of `../lib/sync.js`).
+
+Backups still work too: both apps use the same JSON format. **Export backup** in one, **Import backup** in the other (this replaces everything in the app you import into).
+
+## Importing from CARFAX
+
+**Service log > CARFAX** (or **Data > Import from CARFAX**). Open the vehicle's service history on carfax.com or a CARFAX report, select all the text, copy it and paste it in. The app finds the dated records and maps the work onto your schedule names (e.g. "Oil and filter changed" becomes "Oil & filter change"), then shows a preview so you can choose what to import. Entries already in the log are left unticked. The parser is `carfax.js` (a copy of `../lib/carfax.js`).
+
+## Hosting
+
+`npm run publish-mobile` (also part of `npm run release`) pushes this folder to the repo's `gh-pages` branch, which GitHub Pages serves at https://weeef.github.io/garage/.
 
 ## Things to know
 
 - Data is stored in the browser on that device (localStorage). Clearing site data or uninstalling the web app deletes it. Export a backup now and then.
 - On iOS, export uses the share sheet ("Save to Files" works well).
 - Updating: bump the version in the parent `package.json`, run `npm run sync-version` (it also runs on every build), and upload the folder again. Installed phones check for a new version when opened and show a RELOAD bar. See `RELEASING.md` in the parent folder.
-- `logic.js` is a copy of `../lib/logic.js` (the due-date logic). Keep the two in sync if you change it.
+- `logic.js`, `sync.js` and `carfax.js` are copies of the files in `../lib/`. `npm run sync-version` refreshes them; edit the `lib/` originals.
 
 ## Files
 

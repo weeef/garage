@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($t = [Environment]::GetEnvironmentVariable\\('GH_TOKEN','User'\\); if \\(-not $t\\) { $t = $env:GH_TOKEN }; if \\($t\\) { try { $r = Invoke-RestMethod https://api.github.com/repos/weeef/garage -Headers @{Authorization=\"Bearer $t\"}; \"token ok, push=$\\($r.permissions.push\\)\" } catch { \"token invalid: $\\($_.Exception.Message\\)\" } } else { 'no token' })",
+      "PowerShell(Get-Content *)",
+      "PowerShell($f='release-1.2.0\\\\Garage-Log-Setup-1.2.0.exe'; $sha=[Convert]::ToBase64String\\([Security.Cryptography.SHA512]::Create\\(\\).ComputeHash\\([IO.File]::ReadAllBytes\\(\\(Resolve-Path $f\\)\\)\\)\\); $sha; Select-String release-1.2.0\\\\latest.yml -Pattern '^sha512' | ForEach-Object Line)",
+      "PowerShell(\\(Invoke-WebRequest https://github.com/weeef/garage/releases/latest/download/latest.yml -UseBasicParsing\\).Content)",
+      "PowerShell(Compare-Object *)",
+      "PowerShell(node test/sync.test.js; node test/carfax.test.js)",
+      "PowerShell(npm test *)",
+      "PowerShell(& \".\\\\node_modules\\\\.bin\\\\electron.cmd\" \"C:\\\\Users\\\\theba\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--garage-app\\\\b1c73e8d-fe0f-4030-8382-807b42a0841f\\\\scratchpad\\\\smoke.js\" 2>&1 | Where-Object { $_ -notmatch 'GPU|gpu|Autofill|DevTools' })",
+      "PowerShell(node node_modules/electron/install.js 2>&1 | Select-Object -Last 3; Test-Path node_modules/electron/dist/electron.exe)",
+      "PowerShell($env:ELECTRON_GET_USE_PROXY=''; node -e \"require\\('@electron/get'\\).downloadArtifact\\({version:require\\('./node_modules/electron/package.json'\\).version,artifactName:'electron',platform:'win32',arch:'x64'}\\).then\\(p=>console.log\\('zip',p\\)\\).catch\\(e=>console.log\\('ERR',e.message\\)\\)\"; Get-ChildItem node_modules/electron | Select-Object Name)",
+      "PowerShell(Expand-Archive *)",
+      "PowerShell($r = Invoke-WebRequest -Method Options https://api.github.com/gists -Headers @{Origin='https://weeef.github.io'; 'Access-Control-Request-Method'='PATCH'; 'Access-Control-Request-Headers'='authorization,content-type'} -UseBasicParsing; $r.StatusCode; $r.Headers['Access-Control-Allow-Origin']; $r.Headers['Access-Control-Allow-Methods']; $r.Headers['Access-Control-Allow-Headers'])",
+      "PowerShell(node scripts/publish-mobile.js 2>&1 | ForEach-Object { \"$_\" }; $t=[Environment]::GetEnvironmentVariable\\('GH_TOKEN','User'\\); $h=@{Authorization=\"Bearer $t\"; Accept='application/vnd.github+json'}; try { $pg = Invoke-RestMethod https://api.github.com/repos/weeef/garage/pages -Headers $h; \"pages: $\\($pg.status\\) $\\($pg.html_url\\) source=$\\($pg.source.branch\\)\" } catch { \"pages lookup: $\\($_.Exception.Message\\)\" })",
+      "PowerShell($t=[Environment]::GetEnvironmentVariable\\('GH_TOKEN','User'\\); $h=@{Authorization=\"Bearer $t\"; Accept='application/vnd.github+json'}; try { $pg = Invoke-RestMethod -Method Post https://api.github.com/repos/weeef/garage/pages -Headers $h -ContentType 'application/json' -Body '{\"source\":{\"branch\":\"gh-pages\",\"path\":\"/\"}}'; \"enabled: $\\($pg.html_url\\) $\\($pg.status\\)\" } catch { \"enable failed: $\\($_.Exception.Message\\) $\\($_.ErrorDetails.Message\\)\" })"
+    ]
+  }
+}

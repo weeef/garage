@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { createUpdater } = require('./lib/updater');
@@ -95,6 +95,38 @@ ipcMain.handle('vin:decode', async (_e, vin) => {
   } finally {
     clearTimeout(timer);
   }
+});
+
+// ---------- phone sync settings ----------
+// The sync itself runs in the renderer (lib/sync.js, shared with the phone app). Only the settings live
+// here, with the GitHub token encrypted by Windows (DPAPI) when available.
+const syncFile = () => path.join(app.getPath('userData'), 'sync.json');
+
+ipcMain.handle('sync:getConfig', () => {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(syncFile(), 'utf8'));
+    let token = cfg.token || '';
+    if (cfg.tokenEnc && safeStorage.isEncryptionAvailable()) {
+      token = safeStorage.decryptString(Buffer.from(cfg.tokenEnc, 'base64'));
+    }
+    return { token, gistId: cfg.gistId || null, lastSync: cfg.lastSync || 0 };
+  } catch {
+    return { token: '', gistId: null, lastSync: 0 };
+  }
+});
+
+ipcMain.handle('sync:setConfig', (_e, cfg) => {
+  const file = syncFile();
+  if (!cfg || !cfg.token) {
+    try { fs.unlinkSync(file); } catch { /* not connected */ }
+    return true;
+  }
+  const out = { gistId: cfg.gistId || null, lastSync: cfg.lastSync || 0 };
+  if (safeStorage.isEncryptionAvailable()) out.tokenEnc = safeStorage.encryptString(String(cfg.token)).toString('base64');
+  else out.token = String(cfg.token);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(out, null, 2), 'utf8');
+  return true;
 });
 
 // ---------- auto-update (GitHub Releases via electron-updater) ----------

@@ -1,7 +1,7 @@
 // Runs before every build/release. Makes package.json's version the single source of truth:
 //  - writes mobile/version.json
 //  - sets the mobile service-worker cache name to garage-log-<version> (a new name = phones pick up the update)
-//  - keeps mobile/logic.js identical to lib/logic.js
+//  - keeps mobile/logic.js, sync.js and carfax.js identical to their lib/ originals
 const fs = require('fs');
 const path = require('path');
 const root = path.join(__dirname, '..');
@@ -18,5 +18,7 @@ if (next === sw && !sw.includes(`garage-log-${version}`)) {
 }
 fs.writeFileSync(swPath, next);
 
-fs.copyFileSync(path.join(root, 'lib', 'logic.js'), path.join(root, 'mobile', 'logic.js'));
-console.log(`Synced version ${version} (mobile/version.json, mobile/sw.js, mobile/logic.js)`);
+for (const f of ['logic.js', 'sync.js', 'carfax.js']) {
+  fs.copyFileSync(path.join(root, 'lib', f), path.join(root, 'mobile', f));
+}
+console.log(`Synced version ${version} (mobile/version.json, mobile/sw.js, mobile/logic.js, sync.js, carfax.js)`);
