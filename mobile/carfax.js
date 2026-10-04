@@ -42,7 +42,7 @@
   const PHONE_RE = /\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/;
   const ADDRESS_RE = /^[A-Za-z .'-]+,\s*[A-Z]{2}(\s+\d{5}(-\d{4})?)?$/;
   const URL_RE = /(https?:\/\/|www\.|\.(com|net|org|biz|us)\b|@)/i;
-  const HEADER_RE = /^(date|mileage|source|comments|service history|vehicle history|details?|print|share|carfax|odometer|location|services? performed|show more|show less|see details|view (more|details)|\d+ records?)$/i;
+  const HEADER_RE = /^(date|mileage|source|comments|service history|vehicle history|details?|print|share|carfax|odometer|location|services? performed|show more|show less|see details|view (more|details)|(edit|add|delete|remove|view|hide) (record|service|details)|\d+ records?)$/i;
   const MILES_RE = /\b(\d{1,3}(?:,\d{3})+|\d{1,7})\s*(mi|miles|km|kilometers)\b\.?/i;
   const BARE_NUM_RE = /^(\d{1,3}(?:,\d{3})+|\d{1,7})$/;
 

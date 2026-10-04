@@ -47,9 +47,35 @@
     return Math.round((b.getTime() - a.getTime()) / DAY);
   }
 
+  // What kind of work a service name describes, so "Brake service", "Replaced pads & rotors" and a
+  // "Brake pads & rotors inspection" schedule all count as the same job. First match wins, so brake
+  // fluid is never mistaken for brake pads. null = no known topic (then only exact names match).
+  const TOPICS = [
+    ['brake-fluid', /brake\s*fluid/],
+    ['brakes', /\bbrakes?\b|\bpads?\b|\brotors?\b|\bcalipers?\b/],
+    ['cabin-filter', /cabin/],
+    ['air-filter', /\bair\s*filter|engine\s*filter/],
+    ['oil', /\b(oil|lube|lof)\b(?!.*\bleak)/],
+    ['rotation', /\brotat/],
+    ['alignment', /\balign/],
+    ['coolant', /coolant|antifreeze|radiator/],
+    ['transmission', /transmission|\batf\b/],
+    ['spark-plugs', /spark\s*plug/],
+    ['battery', /\batter(y|ies)\b/],
+    ['wipers', /\bwiper/],
+    ['new-tires', /\bnew tires?\b|\btires? replace|\breplace(d)? tires?\b/]
+  ];
+  function serviceTopic(name) {
+    const n = norm(name);
+    for (const [topic, re] of TOPICS) if (re.test(n)) return topic;
+    return null;
+  }
+
   function lastLogFor(schedule, logs, vehicleId) {
     const key = norm(schedule.name);
-    const matches = logs.filter((l) => l.vehicleId === vehicleId && norm(l.service) === key);
+    const topic = serviceTopic(schedule.name);
+    const matches = logs.filter((l) => l.vehicleId === vehicleId &&
+      (norm(l.service) === key || (topic && serviceTopic(l.service) === topic)));
     if (!matches.length) return null;
     matches.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.odometer || 0) - (a.odometer || 0)));
     return matches[0];
@@ -220,7 +246,7 @@
 
   return {
     PRESETS, parseDate, formatDate, addMonths, daysBetween,
-    lastLogFor, computeStatus, allStatuses, vehicleStats, highestOdometer, logsToCsv,
+    serviceTopic, lastLogFor, computeStatus, allStatuses, vehicleStats, highestOdometer, logsToCsv,
     normalizeVin, vinProblem, vinCheckDigitOk, vehicleFromNhtsa, describeDecoded
   };
 });

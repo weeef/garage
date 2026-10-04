@@ -24,6 +24,30 @@ test('parseDate is local, no off-by-one', () => {
   assert.equal(L.parseDate('garbage'), null);
 });
 
+test('a differently named log of the same work resets the schedule', () => {
+  const brakes = { id: 's2', vehicleId: 'v1', name: 'Brake pads & rotors inspection', intervalMiles: 20000, intervalMonths: 12 };
+  const fluid = { id: 's3', vehicleId: 'v1', name: 'Brake fluid flush', intervalMiles: 30000, intervalMonths: 24 };
+  const logs = [
+    { vehicleId: 'v1', service: 'Brake pads & rotors inspection', date: '2018-02-08', odometer: 27876 },
+    { vehicleId: 'v1', service: 'Brake service', date: '2026-07-11', odometer: 99556 }
+  ];
+  const st = L.computeStatus(brakes, logs, car, NOW);
+  assert.equal(st.last.date, '2026-07-11');
+  assert.equal(st.status, 'ok');
+  assert.equal(L.computeStatus(fluid, logs, car, NOW).status, 'unknown', 'brake job is not a fluid flush');
+});
+
+test('service topics', () => {
+  assert.equal(L.serviceTopic('Replaced front pads and rotors'), 'brakes');
+  assert.equal(L.serviceTopic('Brake fluid exchange'), 'brake-fluid');
+  assert.equal(L.serviceTopic('Oil & filter change'), 'oil');
+  assert.equal(L.serviceTopic('Oil leak repair'), null);
+  assert.equal(L.serviceTopic('Cabin air filter'), 'cabin-filter');
+  assert.equal(L.serviceTopic('Engine air filter'), 'air-filter');
+  assert.equal(L.serviceTopic('Wiper blades'), 'wipers');
+  assert.equal(L.serviceTopic('Detail'), null);
+});
+
 test('no log means unknown', () => {
   const st = L.computeStatus(oil, [], car, NOW);
   assert.equal(st.status, 'unknown');
