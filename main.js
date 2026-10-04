@@ -220,6 +220,32 @@ ipcMain.handle('replica:prune', (_e, keep) => {
   return true;
 });
 
+// ---------- PDF receipts on service entries (lib/ui-receipts.js) ----------
+const receiptDir = () => path.join(app.getPath('userData'), 'receipts');
+const receiptFile = (id) => (/^[a-z0-9-]{8,64}$/.test(String(id || '')) ? path.join(receiptDir(), `${id}.pdf`) : null);
+
+ipcMain.handle('receipt:save', (_e, id, bytes) => {
+  const file = receiptFile(id);
+  const buf = Buffer.from(bytes || []);
+  if (!file || buf.length > 25 * 1048576 || buf.subarray(0, 5).toString('latin1') !== '%PDF-') return false;
+  fs.mkdirSync(receiptDir(), { recursive: true });
+  fs.writeFileSync(file, buf);
+  return true;
+});
+ipcMain.handle('receipt:open', async (_e, id) => {
+  const file = receiptFile(id);
+  if (!file || !fs.existsSync(file)) return false;
+  return (await shell.openPath(file)) === ''; // the user's PDF viewer
+});
+ipcMain.handle('receipt:list', () => {
+  try { return fs.readdirSync(receiptDir()).filter((f) => f.endsWith('.pdf')).map((f) => f.slice(0, -4)); } catch { return []; }
+});
+ipcMain.handle('receipt:remove', (_e, id) => {
+  const file = receiptFile(id);
+  try { if (file) fs.unlinkSync(file); } catch { /* already gone */ }
+  return true;
+});
+
 // ---------- phone sync settings ----------
 // The sync itself runs in the renderer (lib/sync.js, shared with the phone app). Only the settings live
 // here, with the GitHub token encrypted by Windows (DPAPI) when available.

@@ -26,7 +26,7 @@ Run the tests: `npm test` (also checks the phone app is level with the desktop a
 ## How it works
 
 - **Vehicles**: add as many as you like (miles or km). Updating the odometer or logging a service with a higher reading moves it forward.
-- **Service log**: date, odometer, service, cost, DIY/shop, notes. Export to CSV.
+- **Service log**: date, odometer, service, cost, DIY/shop, notes. Everything done on the same day is shown as one visit with its total. Attach PDF receipts to a visit (+ RECEIPT) or to an entry when adding or editing it; a shop invoice imported from a PDF keeps that PDF. Receipts are stored on the device they were added on (PC: the app's data folder; phone: the app's storage): the list syncs, the files don't, and JSON backups don't include them. Export to CSV.
 - **Schedules**: "every X miles and/or Y months". A schedule matches log entries by name, so logging "Oil & filter change" resets its countdown. Whichever limit hits first sets the status: ok, soon (within 10% of the interval or 30 days), overdue.
 - **VIN lookup**: type or paste a VIN when adding a vehicle and the year, make and model fill in automatically (free NHTSA database, needs internet; you can always fill details by hand). A VIN whose check digit doesn't match gets a warning, in case of a typo.
 - **Dashboard**: odometer, total spend, last 12 months, cost per mile, what's due, recent work.
@@ -63,6 +63,7 @@ lib/              Code shared by both apps:
   replica.js        real car models from Sketchfab: search results, downloads, fitting a model to the car
   ui-replica.js     the real-model picker
   ui-registration.js registration (tabs) and license plate
+  ui-receipts.js    PDF receipts on service entries
   plates.js         license plates in the style of each US state
   ui-car.js         the dashboard car: 3D stage, photo, background look-ups
   ui-fuel.js        fuel form, receipt import, delete, dashboard fuel card

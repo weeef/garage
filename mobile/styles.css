@@ -339,3 +339,20 @@ input.fuel-pick, input.fuel-pick-all { width: 18px; height: 18px; accent-color: 
 .plate-card { position: absolute; right: 10px; top: 8px; z-index: 2; width: 104px; line-height: 0; border-radius: 5px; box-shadow: 0 3px 10px rgba(0,0,0,0.45); transform: rotate(-2deg); }
 .plate-card img { width: 100%; height: auto; border-radius: 5px; }
 .car-stage .car-tag { max-width: calc(100% - 140px); }
+
+/* service log: one card per visit (everything done that day) */
+.card.visit .visit-items { margin-top: 8px; border-top: 1px solid var(--line); }
+.card.visit .vi { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.card.visit .vi:last-child { border-bottom: 0; }
+.card.visit .vi-main { display: flex; justify-content: space-between; gap: 10px; }
+.card.visit .vi .btns { margin-top: 6px; }
+.visit-rcpts { margin-top: 8px; }
+
+/* PDF receipts (lib/ui-receipts.js) */
+.rcpts { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rcpt { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); padding: 2px 6px; font-size: 12px; max-width: 220px; }
+.rcpt a.link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rcpt .rcpt-x { color: var(--dim); text-decoration: none; padding: 0 2px; }
+.rcpt .rcpt-x:hover { color: var(--over); }
+.rcpt.missing { opacity: 0.55; border-style: dashed; }
+.rcpt-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }

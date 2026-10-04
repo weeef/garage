@@ -300,3 +300,24 @@ input.fuel-pick, input.fuel-pick-all { width: 18px; height: 18px; accent-color: 
 .plate-card:hover { transform: rotate(0deg) scale(1.04); }
 .plate-card img { width: 100%; height: auto; border-radius: 6px; }
 .car-stage .car-tag { max-width: calc(100% - 190px); }
+
+/* service log: one card per visit (everything done that day) */
+.visits { display: flex; flex-direction: column; gap: 12px; }
+.visit { border: 1px solid var(--line); background: var(--panel); }
+.visit-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.visit-head .vd { color: var(--accent); letter-spacing: 1px; }
+.visit-head .vm { color: var(--dim); font-size: 13px; }
+.visit-head .vt { font-size: 15px; white-space: nowrap; }
+.visit-head .grow { flex: 1; }
+.visit-items { width: 100%; }
+.visit-items td { border-bottom: 1px solid var(--line); }
+.visit-items tr:last-child td { border-bottom: 0; }
+
+/* PDF receipts (lib/ui-receipts.js) */
+.rcpts { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rcpt { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); padding: 2px 6px; font-size: 12px; max-width: 220px; }
+.rcpt a.link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rcpt .rcpt-x { color: var(--dim); text-decoration: none; padding: 0 2px; }
+.rcpt .rcpt-x:hover { color: var(--over); }
+.rcpt.missing { opacity: 0.55; border-style: dashed; }
+.rcpt-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }

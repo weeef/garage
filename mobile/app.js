@@ -340,6 +340,7 @@
         data.logs = data.logs.filter((l) => l.vehicleId !== v.id);
         data.schedules = data.schedules.filter((s) => s.vehicleId !== v.id);
         data.fuel = data.fuel.filter((f) => f.vehicleId !== v.id);
+        setTimeout(() => receipts.prune(), 0);
         data.vehicles = data.vehicles.filter((x) => x.id !== v.id);
         vehicleId = data.vehicles[0]?.id || null;
         persist(); render();
@@ -373,6 +374,7 @@
   function logForm(existing, preset) {
     const v = vehicle();
     if (!v) return;
+    const receiptRow = receipts.formSection(existing);
     openForm({
       title: existing ? 'Edit service entry' : 'Log a service',
       fields: [
@@ -392,12 +394,13 @@
         if (!L.parseDate(f.date)) return 'Pick a valid date.';
         const entry = { vehicleId: v.id, service: f.service, date: f.date, odometer: odo, cost, by: f.by, notes: f.notes };
         if (existing) Object.assign(existing, entry);
-        else data.logs.push({ id: uid(), ...entry });
+        else { const added = { id: uid(), ...entry }; data.logs.push(added); receiptRow.flush(added); }
         v.odometer = L.highestOdometer(v, [...data.logs, ...data.fuel]);
         persist(); render();
         toast(existing ? 'ENTRY UPDATED' : 'SERVICE LOGGED');
       }
     });
+    receiptRow.mount();
   }
 
   function deleteLog(id) {
@@ -406,6 +409,7 @@
     confirmDialog('Delete entry?', `Remove "${l.service}" from ${l.date}?`, 'DELETE', () => {
       data.logs = data.logs.filter((x) => x.id !== id);
       persist(); render();
+      receipts.prune();
     });
   }
 
@@ -534,13 +538,20 @@
   }
 
   function viewLog(v) {
-    const rows = data.logs
-      .filter((l) => l.vehicleId === v.id)
-      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.odometer || 0) - (a.odometer || 0)));
-    const body = rows.length
-      ? `<div class="cards">${rows.map(logCardHtml.bind(null, v, true)).join('')}</div>`
+    const logs = data.logs.filter((l) => l.vehicleId === v.id);
+    const visits = L.groupVisits(logs);
+    const body = visits.length
+      ? `<div class="cards">${visits.map((vis) => `<div class="card visit">
+          <div class="head"><span class="name">${esc(vis.date)}</span><span class="amt">${money(vis.total)}</span></div>
+          <div class="meta">${[vis.odometer ? fmtInt(vis.odometer) + ' ' + unit(v) : '', vis.by, vis.entries.length > 1 ? vis.entries.length + ' items' : ''].filter(Boolean).map(esc).join(' · ')}</div>
+          <div class="visit-items">${vis.entries.map((l) => `<div class="vi">
+            <div class="vi-main"><span>${esc(l.service)}</span><span>${money(l.cost)}</span></div>
+            ${l.notes ? `<div class="notes">${esc(l.notes)}</div>` : ''}
+            <div class="btns"><button class="btn ghost small" data-action="editlog" data-id="${l.id}">EDIT</button>
+              <button class="btn danger small" data-action="dellog" data-id="${l.id}">DELETE</button></div></div>`).join('')}</div>
+          <div class="visit-rcpts">${receipts.chipsHtml(vis.entries)}</div></div>`).join('')}</div>`
       : `<div class="empty">No service history yet.</div>`;
-    return `<div class="row"><h1><span class="rule"></span>Service log · ${rows.length}</h1>
+    return `<div class="row"><h1><span class="rule"></span>Service log · ${visits.length} visit${visits.length === 1 ? '' : 's'}</h1>
       <button class="btn ghost small" data-action="import">IMPORT</button>
       <button class="btn ghost small" data-action="csv">CSV</button></div>${body}`;
   }
@@ -664,6 +675,7 @@
     fab.textContent = view === 'due' ? '+ SCHEDULE' : view === 'fuel' ? '+ FILL-UP' : '+ LOG';
     car.mount(v);
     TH.paintSwatches(main);
+    receipts.markMissing(main);
     main.dataset.here = here;
     main.scrollTop = keepScroll;
     renderUpdateBar();
@@ -762,6 +774,33 @@
   const ROW = (e, v, isOrder) => `<span class="s">${esc(e.service)}${isOrder ? ' · ' + money(e.cost) : ''}${e.duplicate ? ' <em>already logged</em>' : ''}</span>
         <span class="meta">${isOrder ? '' : esc(e.date) + ' · ' + fmtInt(e.odometer) + ' ' + unit(v)}<small>${esc(e.notes.replace(/^Imported from CARFAX( · )?/, ''))}</small></span>`;
 
+  // ---------- PDF receipts on service entries (lib/ui-receipts.js) ----------
+  const RECEIPTS = 'garage-log-receipts';
+  const receipts = window.GarageReceiptsUI.create({
+    data: () => data, persist, render, $, esc, toast, confirmDialog, uid,
+    store: {
+      // kept in Cache Storage (the service worker leaves that cache alone when it updates the app)
+      async save(id, bytes) {
+        if (!('caches' in window)) return false;
+        await (await caches.open(RECEIPTS)).put('/receipts/' + id, new Response(new Blob([bytes], { type: 'application/pdf' })));
+        return true;
+      },
+      async open(id) {
+        const res = 'caches' in window && (await (await caches.open(RECEIPTS)).match('/receipts/' + id));
+        if (!res) return false;
+        window.open(URL.createObjectURL(await res.blob()), '_blank');
+        return true;
+      },
+      async list() {
+        if (!('caches' in window)) return [];
+        return (await (await caches.open(RECEIPTS)).keys()).map((r) => new URL(r.url).pathname.split('/').pop());
+      },
+      async remove(id) {
+        if ('caches' in window) await (await caches.open(RECEIPTS)).delete('/receipts/' + id);
+      }
+    }
+  });
+
   // ---------- registration and plate (lib/ui-registration.js) ----------
   const registration = RG.create({ vehicle, persist, render, openForm, toast, L });
 
@@ -842,7 +881,7 @@
   });
 
   // order: the parsed work order (one visit, date/mileage editable), or null for CARFAX (many visits).
-  function previewImport(v, entries, order) {
+  function previewImport(v, entries, order, file) {
     const dupes = entries.filter((e) => e.duplicate).length;
     const total = entries.reduce((s, e) => s + (e.cost || 0), 0);
     openForm({
@@ -864,9 +903,9 @@
           odo = f.odometer === '' ? null : Number(f.odometer);
           if (odo != null && !(odo >= 0)) return 'Odometer must be a number.';
         }
-        for (const { duplicate, ...entry } of picked) {
-          data.logs.push({ id: uid(), ...entry, ...(order ? { date, odometer: odo } : {}) });
-        }
+        const added = picked.map(({ duplicate, ...entry }) => ({ id: uid(), ...entry, ...(order ? { date, odometer: odo } : {}) }));
+        data.logs.push(...added);
+        if (file) receipts.attach(file, added).then(() => { persist(); render(); });
         v.odometer = L.highestOdometer(v, [...data.logs, ...data.fuel]);
         persist(); render();
         toast(`${picked.length} ${picked.length === 1 ? 'ENTRY' : 'ENTRIES'} IMPORTED`);
@@ -1058,6 +1097,9 @@
   const actions = {
     import: importRecords,
     replica: () => replica.open(),
+    rcptadd: (ids) => receipts.pick(String(ids).split(',')),
+    rcptopen: (id) => receipts.open(id),
+    rcptdel: (both) => { const [id, ids] = String(both).split('|'); receipts.remove(id, ids.split(',')); },
     renewreg: () => registration.renew(),
     repoff: () => replica.setToken('').then(() => toast('SKETCHFAB DISCONNECTED')),
     addfuel: () => fuelForm(null),
