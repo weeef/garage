@@ -294,3 +294,9 @@ input.fuel-pick, input.fuel-pick-all { width: 18px; height: 18px; accent-color: 
 .plate-badge { display: inline-block; margin-left: 10px; padding: 1px 7px; border: 1px solid var(--line); background: var(--text); color: var(--bg); font-size: 0.8em; letter-spacing: 1px; vertical-align: 2px; border-radius: 3px; }
 .due.reg { margin-bottom: 10px; }
 .car-photo ~ .car-credit.model-credit { left: 112px; }
+
+/* the license plate card, top right of the car stage */
+.plate-card { position: absolute; right: 12px; top: 10px; z-index: 2; width: 150px; line-height: 0; border-radius: 6px; box-shadow: 0 3px 12px rgba(0,0,0,0.45); transform: rotate(-2deg); transition: transform 0.15s; }
+.plate-card:hover { transform: rotate(0deg) scale(1.04); }
+.plate-card img { width: 100%; height: auto; border-radius: 6px; }
+.car-stage .car-tag { max-width: calc(100% - 190px); }

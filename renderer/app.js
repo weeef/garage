@@ -598,6 +598,7 @@
     findLook: async (spec) => { try { return await window.garage.findLook(spec); } catch { return { ok: false }; } },
     vendorBase: '../lib/vendor/',
     R: GR,
+    P: window.GaragePlates,
     readReplica: (uid) => window.garage.replicaRead(uid),
     replicaFailed: (v) => replicaMissing(v),
     hints: { spin: 'drag to spin', paint: 'paint & body' }

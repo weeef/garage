@@ -694,6 +694,7 @@
     findLook: findLookOnline,
     vendorBase: 'lib/vendor/',
     R: GR,
+    P: window.GaragePlates,
     readReplica: (uid) => repRead(uid),
     replicaFailed: (v) => replicaMissing(v),
     hints: { spin: 'swipe to spin', paint: 'paint' }

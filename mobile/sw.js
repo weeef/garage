@@ -1,7 +1,7 @@
 // Offline cache for the app shell.
 // CACHE is set from package.json's version by `npm run sync-version` (runs on every build/release):
 // a new version = a new cache name = phones install the whole new set atomically, then offer a reload.
-const CACHE = 'garage-log-1.11.0';
+const CACHE = 'garage-log-1.12.0';
 const SHELL = [
   './',
   'index.html',
@@ -18,6 +18,7 @@ const SHELL = [
   'lib/carlook.js',
   'lib/fuel.js',
   'lib/logic.js',
+  'lib/plates.js',
   'lib/replica.js',
   'lib/sync.js',
   'lib/themes.js',
