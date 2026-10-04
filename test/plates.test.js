@@ -23,14 +23,21 @@ test('states are found by code or name, any case', () => {
 });
 
 test('every state has a complete design; unknown regions get a plain plate with their name', () => {
+  const hex = /^#[0-9a-f]{6}$/i;
   for (const [code, s] of Object.entries(P.STATES)) {
-    assert.equal(s.length, 8, code);
-    for (const c of s.slice(2, 6)) assert.match(c, /^#[0-9a-f]{6}$/i, code);
-    assert.ok(['script', 'serif', 'sans'].includes(s[6]), code);
+    assert.ok(s.name && s.top !== undefined && s.bottom !== undefined, code);
+    assert.ok(s.bg.length >= 2 && s.bg.every((c) => hex.test(c)), `${code} background`);
+    for (const k of ['chars', 'ink', 'bottomInk']) if (s[k]) assert.match(s[k], hex, `${code} ${k}`);
+    assert.ok(!s.style || ['script', 'serif', 'sans'].includes(s.style), code);
+    for (const a of s.art) assert.ok(P.ART[a.split(':')[0]], `${code} draws ${a}`);
   }
+  // Washington's standard plate: red "Washington", navy characters, Mount Rainier, "EVERGREEN STATE"
   const wa = P.design('wa');
   assert.equal(wa.name, 'Washington');
-  assert.equal(wa.slogan, 'Evergreen State');
+  assert.equal(wa.top, 'Washington');
+  assert.equal(wa.bottom, 'EVERGREEN STATE');
+  assert.deepEqual(wa.art, ['rainier']);
+  assert.equal(wa.ink, '#c8102e');
   const other = P.design('Bavaria');
   assert.equal(other.code, '');
   assert.equal(other.name, 'Bavaria');
