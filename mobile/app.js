@@ -793,7 +793,7 @@
       });
   });
 
-  const PDF_BASE = 'vendor/';
+  const PDF_BASE = 'lib/vendor/';
   const PASTE_HINT = "Or paste: an email receipt, a CARFAX service history page, or a paper receipt (point your camera at it and use Live Text on iPhone or Google Lens on Android to copy the text).";
   const ROW = (e, v, isOrder) => `<span class="s">${esc(e.service)}${isOrder ? ' · ' + money(e.cost) : ''}${e.duplicate ? ' <em>already logged</em>' : ''}</span>
         <span class="meta">${isOrder ? '' : esc(e.date) + ' · ' + fmtInt(e.odometer) + ' ' + unit(v)}<small>${esc(e.notes.replace(/^Imported from CARFAX( · )?/, ''))}</small></span>`;

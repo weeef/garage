@@ -1,6 +1,6 @@
 // Usage: node scripts/check-mobile.js (runs in `npm test` and before every release)
 // Keeps the phone app (mobile/) level with the Windows app. Fails when:
-//  - a shared lib/ file is missing from mobile/, differs from lib/, isn't loaded by mobile/index.html
+//  - a shared lib/ file is missing from mobile/lib/, differs from lib/, isn't loaded by mobile/index.html
 //    or isn't in the service worker's offline cache (phones would run without it)
 //  - mobile/version.json or the service-worker cache name doesn't match package.json
 //  - the Windows app has an action (button) the phone app doesn't handle
@@ -38,13 +38,13 @@ function problems() {
   const phoneApp = read('mobile/app.js');
   const shell = (sw.match(/const SHELL = \[([\s\S]*?)\];/) || [])[1] || '';
   for (const f of sharedFiles()) {
-    const mob = path.join(root, 'mobile', f);
-    if (!fs.existsSync(mob)) { out.push(`mobile/${f} is missing`); continue; }
-    if (!fs.readFileSync(mob).equals(fs.readFileSync(path.join(root, 'lib', f)))) out.push(`mobile/${f} differs from lib/${f}`);
+    const mob = path.join(root, 'mobile', 'lib', f);
+    if (!fs.existsSync(mob)) { out.push(`mobile/lib/${f} is missing (run npm run sync-version)`); continue; }
+    if (!fs.readFileSync(mob).equals(fs.readFileSync(path.join(root, 'lib', f)))) out.push(`mobile/lib/${f} differs from lib/${f} (run npm run sync-version)`);
     if (!f.endsWith('.js') || f.includes('.worker.')) continue; // licenses; pdf.js loads its worker itself
-    const lazy = phoneApp.includes(`'${path.basename(f)}'`); // loaded on demand, e.g. pdf.js
-    if (!html.includes(`src="${f}"`) && !lazy) out.push(`mobile/index.html doesn't load ${f}`);
-    if (!shell.includes(`'${f}'`)) out.push(`mobile/sw.js doesn't cache ${f} for offline use`);
+    const lazy = phoneApp.includes(path.basename(f)); // loaded on demand, e.g. pdf.js and three.js
+    if (!html.includes(`src="lib/${f}"`) && !lazy) out.push(`mobile/index.html doesn't load lib/${f}`);
+    if (!shell.includes(`'lib/${f}'`)) out.push(`mobile/sw.js doesn't cache lib/${f} for offline use`);
   }
   const { version } = JSON.parse(read('package.json'));
   const mv = JSON.parse(read('mobile/version.json')).version;

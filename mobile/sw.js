@@ -3,8 +3,28 @@
 // a new version = a new cache name = phones install the whole new set atomically, then offer a reload.
 const CACHE = 'garage-log-1.8.2';
 const SHELL = [
-  './', 'index.html', 'styles.css', 'app.js', 'logic.js', 'sync.js', 'carfax.js', 'workorder.js', 'fuel.js', 'updatebanner.js', 'car3d.js', 'carlook.js', 'themes.js', 'vendor/three.min.js', 'vendor/pdf.min.js', 'vendor/pdf.worker.min.js', 'version.json', 'manifest.webmanifest',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'
+  './',
+  'index.html',
+  'styles.css',
+  'app.js',
+  'version.json',
+  'manifest.webmanifest',
+  'icons/icon-192.png',
+  'icons/icon-512.png',
+  'icons/icon-maskable-512.png',
+  'icons/apple-touch-icon.png',
+  'lib/car3d.js',
+  'lib/carfax.js',
+  'lib/carlook.js',
+  'lib/fuel.js',
+  'lib/logic.js',
+  'lib/sync.js',
+  'lib/themes.js',
+  'lib/updatebanner.js',
+  'lib/workorder.js',
+  'lib/vendor/pdf.min.js',
+  'lib/vendor/pdf.worker.min.js',
+  'lib/vendor/three.min.js'
 ];
 
 self.addEventListener('install', (e) => {

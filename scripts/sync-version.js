@@ -1,7 +1,8 @@
 // Runs before every build/release. Makes package.json's version the single source of truth:
 //  - writes mobile/version.json
 //  - sets the mobile service-worker cache name to garage-log-<version> (a new name = phones pick up the update)
-//  - copies every shared lib/ file (all but the Electron-only ones) into mobile/, so the phone app matches
+//  - copies every shared lib/ file (all but the Electron-only ones) into mobile/lib/, so the phone app matches
+//  - lists them in the service worker's offline cache
 const fs = require('fs');
 const path = require('path');
 const root = path.join(__dirname, '..');
@@ -18,9 +19,24 @@ if (next === sw && !sw.includes(`garage-log-${version}`)) {
 }
 fs.writeFileSync(swPath, next);
 
-// Every lib/ file is shared with the phone app except the Electron-only ones, so a new shared file
-// can't be forgotten. scripts/check-mobile.js then makes sure the phone app actually loads it.
+// The phone app gets every shared lib/ file (all but the Electron-only ones) in mobile/lib/, rebuilt
+// from scratch so nothing stale is left behind. mobile/lib/ is generated (and git-ignored).
 const { sharedFiles } = require('./check-mobile');
-fs.mkdirSync(path.join(root, 'mobile', 'vendor'), { recursive: true });
-for (const f of sharedFiles()) fs.copyFileSync(path.join(root, 'lib', f), path.join(root, 'mobile', f));
-console.log(`Synced version ${version} (mobile/version.json, mobile/sw.js, shared lib files)`);
+const libOut = path.join(root, 'mobile', 'lib');
+fs.rmSync(libOut, { recursive: true, force: true });
+fs.mkdirSync(path.join(libOut, 'vendor'), { recursive: true });
+for (const f of sharedFiles()) fs.copyFileSync(path.join(root, 'lib', f), path.join(libOut, f));
+
+// The service worker's offline file list: the app shell plus every shared file.
+const shell = ['./', 'index.html', 'styles.css', 'app.js', 'version.json', 'manifest.webmanifest',
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
+  ...sharedFiles().filter((f) => !f.endsWith('.txt')).map((f) => 'lib/' + f)];
+const sw2 = fs.readFileSync(swPath, 'utf8');
+const list = 'const SHELL = [\n' + shell.map((f) => `  '${f}'`).join(',\n') + '\n];';
+const sw3 = sw2.replace(/const SHELL = \[[\s\S]*?\];/, list);
+if (sw3 === sw2 && !sw2.includes(list)) {
+  console.error('Could not find the SHELL list in mobile/sw.js');
+  process.exit(1);
+}
+fs.writeFileSync(swPath, sw3);
+console.log(`Synced version ${version} (mobile/version.json, mobile/sw.js, mobile/lib/)`);
