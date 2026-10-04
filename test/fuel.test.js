@@ -46,7 +46,7 @@ TOTAL $74.99`;
 
 test('reads common receipt layouts', () => {
   const [s] = F.parseReceipts(SHELL);
-  assert.deepEqual(s, { date: '2025-03-14', station: 'Shell', grade: 'regular', volume: 12.345, volumeUnit: 'gal', price: 3.459, total: 42.7, odometer: null });
+  assert.deepEqual(s, { date: '2025-03-14', time: '17:42', station: 'Shell', ref: '', grade: 'regular', volume: 12.345, volumeUnit: 'gal', price: 3.459, total: 42.7, odometer: null });
   const [c] = F.parseReceipts(COSTCO);
   assert.equal(c.station, 'Costco');
   assert.equal(c.date, '2025-03-02');
@@ -57,6 +57,52 @@ test('reads common receipt layouts', () => {
   assert.equal(e.date, '2025-03-03');
   assert.equal(e.grade, 'midgrade');
   assert.equal(e.total, 48.16);
+});
+
+// A Costco gas receipt as saved from costco.com > Orders & Purchases (as pdf.js reads it; the browser's
+// print header and footer included). Numbers are made up.
+const COSTCO_WEB = `10/4/26, 1:01 PM   Orders & Purchases | Costco
+Eagan #1363
+995 BLUE GENTIAN RD
+EAGAN, MN 55121
+Member   111122223333
+Invoice#   7889
+Date:   08/26/26
+Time:   18:25
+Auth#   00436G
+VI Acct #
+************1234
+Pump   Gallons   Price
+16   9.730   $4.689
+Product   Amount
+Premium   $45.62
+Total Sale   $45.62
+Sale - Contactless
+Approved
+TranID# 623800001111
+Thank you for your purchase of Kirkland
+Signature Fuel.
+Visit Costco.com
+Search: Fuel
+https://www.costco.com/myaccount/#/app/0000/ordersandpurchases   1/1`;
+
+test('Costco web receipts: the Gallons / Price table, the purchase date, warehouse and transaction', () => {
+  const found = F.parseReceipts(COSTCO_WEB);
+  assert.equal(found.length, 1);
+  const r = found[0];
+  assert.equal(r.date, '2026-08-26'); // not the 10/4/26 the page was saved
+  assert.equal(r.time, '18:25');
+  assert.equal(r.volume, 9.73);
+  assert.equal(r.price, 4.689);
+  assert.equal(r.total, 45.62);
+  assert.equal(r.grade, 'premium');
+  assert.equal(r.station, 'Costco Eagan #1363');
+  assert.equal(r.ref, '623800001111');
+  assert.ok(!JSON.stringify(r).includes('111122223333') && !JSON.stringify(r).includes('1234"'), 'no member or card numbers');
+  // the same table typed or pasted with single spaces (e.g. Live Text from the paper slip)
+  const [p] = F.parseReceipts(COSTCO_WEB.replace(/ {2,}/g, ' '));
+  assert.equal(p.volume, 9.73);
+  assert.equal(p.price, 4.689);
 });
 
 test('snacks on the same receipt are left out of the fuel cost', () => {

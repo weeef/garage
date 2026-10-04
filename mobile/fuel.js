@@ -23,7 +23,14 @@
     ['midgrade', /\bmid(-?grade)?\b|\bplus\b|\b89\b/i], ['e85', /\be-?85\b|flex ?fuel/i], ['regular', /\breg(ular)?\b|\bunl(eaded)?\b|\bunld\b|\b87\b/i]];
 
   // ---------- dates ----------
+  // The receipt's own "Date:" first, so a date printed elsewhere (e.g. a browser's print header)
+  // can't win; then any date in the text.
   function findDate(text) {
+    const labeled = String(text).match(/\b(?:date|purchase date|transaction date|sale date)\b\s*[:#]?\s*([^\n]{6,24})/i);
+    const d = labeled && anyDate(labeled[1]);
+    return d || anyDate(String(text));
+  }
+  function anyDate(text) {
     let m = text.match(/\b(20\d\d|19\d\d)-(\d\d?)-(\d\d?)\b/);
     if (m) return iso(+m[1], +m[2], +m[3]);
     m = text.match(/\b(\d\d?)[/.-](\d\d?)[/.-](\d{4}|\d\d)\b/);
@@ -47,6 +54,65 @@
   }
 
   // ---------- one receipt ----------
+  // Drops what a browser adds when a web receipt is saved as a PDF (Costco's Orders & Purchases page,
+  // emailed receipts): the "10/4/26, 1:01 PM  Page title" header and the URL / page-number footer.
+  function clean(text) {
+    return String(text || '').replace(/\r/g, '').split('\n')
+      .filter((l) => !/^\s*\d{1,2}\/\d{1,2}\/\d{2,4},\s+\d{1,2}:\d{2}\s*[AP]M\b/i.test(l) && !/^\s*https?:\/\//i.test(l))
+      .join('\n');
+  }
+
+  // Column layouts, e.g. Costco's "Pump  Gallons  Price" over "16  9.730  $4.689".
+  function findTable(t) {
+    const lines = t.split('\n');
+    const val = (x) => Number(String(x || '').replace(/[$,]/g, ''));
+    for (let i = 0; i < lines.length - 1; i++) {
+      const head = lines[i].trim().split(/\s+/);
+      const vi = head.findIndex((h) => /^(gallons?|gals?|liters?|litres?|ltrs?|volume|qty)$/i.test(h));
+      const pi = head.findIndex((h) => /^(price|ppg|ppl|price\/gal|price\/l|\$\/gal|\$\/l)$/i.test(h));
+      if (vi < 0 || pi < 0) continue;
+      const vals = (lines.slice(i + 1).find((l) => l.trim()) || '').trim().split(/\s+/);
+      if (vals.length !== head.length) continue;
+      const volume = val(vals[vi]);
+      const price = val(vals[pi]);
+      return {
+        volume: volume > 0.5 && volume < 400 ? { volume, unit: /lit|ltr/i.test(head[vi]) ? 'L' : 'gal' } : null,
+        price: price > 0.2 && price < 15 ? price : null
+      };
+    }
+    return null;
+  }
+
+  // The receipt's own number (Costco's TranID, else a transaction / invoice / receipt number), so the
+  // same receipt imported twice is recognised. Member and card numbers are never read.
+  function findRef(t) {
+    const pats = [/\btran(?:saction)?\s*id\s*[:#]?\s*([A-Z0-9-]{4,})/i, /\btrans(?:action)?\s*#\s*:?\s*([A-Z0-9-]{4,})/i,
+      /\b(?:invoice|receipt|ref(?:erence)?)\s*(?:#|no\.?|number)\s*:?\s*([A-Z0-9-]{3,})/i];
+    for (const re of pats) {
+      const m = t.match(re);
+      if (m && /\d/.test(m[1])) return m[1];
+    }
+    return '';
+  }
+
+  // Which warehouse / station it was: a line like "Eagan #1363".
+  function findLocation(t, brand) {
+    const skip = /\b(invoice|auth|pump|member|store|tran|trans|order|receipt|ref|acct|account|register|terminal|cashier|card|approval|seq)\b/i;
+    for (const l of t.split('\n')) {
+      const m = l.trim().match(/^([A-Za-z][A-Za-z .'-]{1,30}?)\s*#\s*(\d{2,6})$/);
+      if (m && !skip.test(m[1]) && !(brand && m[1].toLowerCase().includes(brand.toLowerCase()))) return `${m[1].trim()} #${m[2]}`;
+    }
+    return '';
+  }
+
+  function findTime(t) {
+    const m = t.match(/\btime\b\s*[:#]?\s*(\d{1,2}):(\d{2})(?::\d{2})?\s*([ap]\.?m\.?)?/i);
+    if (!m) return '';
+    let h = Number(m[1]);
+    if (m[3] && /p/i.test(m[3]) && h < 12) h += 12;
+    if (m[3] && /a/i.test(m[3]) && h === 12) h = 0;
+    return h < 24 ? `${pad(h)}:${m[2]}` : '';
+  }
   const N = '(\\d{1,3}(?:[.,]\\d{1,4}))';
   const VOL_UNIT = '(gallons?|gals?|g|liters?|litres?|ltrs?|l)';
 
@@ -99,8 +165,9 @@
 
   function parseOne(text) {
     const t = String(text || '');
-    const vol = findVolume(t);
-    let price = findPrice(t);
+    const table = findTable(t);
+    const vol = (table && table.volume) || findVolume(t);
+    let price = (table && table.price) || findPrice(t);
     const fuelSale = findAmount(t, 'fuel sale|fuel total|fuel amount|fuel|pump sale|gas sale|sale amount');
     const total = findAmount(t, 'total sale|total|amount due|amount|grand total|purchase|charged|debit|credit|visa|mastercard|paid');
     let amount = fuelSale || null;
@@ -114,9 +181,13 @@
     if (!vol && !amount) return null;
     const grade = (GRADES.find(([, re]) => re.test(t)) || [''])[0];
     const odo = t.match(/\b(?:odometer|odo|mileage|miles)\b\s*[:#]?\s*(\d{1,3}(?:,\d{3})+|\d{3,7})\b/i);
+    const brand = findStation(t);
+    const where = findLocation(t, brand);
     return {
       date: findDate(t),
-      station: findStation(t),
+      time: findTime(t),
+      station: where && brand ? `${brand} ${where}` : brand || where,
+      ref: findRef(t),
       grade,
       volume: vol ? vol.volume : null,
       volumeUnit: vol ? vol.unit : null,
@@ -129,7 +200,7 @@
   // Text with one or more receipts -> fill-ups. A new receipt starts at a block (paragraph) that has
   // a date or volume once the current one already has its volume.
   function parseReceipts(text) {
-    const blocks = String(text || '').replace(/\r/g, '').split(/\n\s*\n/);
+    const blocks = clean(text).split(/\n\s*\n/);
     const chunks = [];
     let cur = '';
     for (const b of blocks) {
@@ -154,6 +225,8 @@
     return {
       vehicleId: vehicle.id,
       date: r.date || today,
+      time: r.time || '',
+      ref: r.ref || '',
       odometer: r.odometer || null,
       volume: volume || null,
       price: price || null,

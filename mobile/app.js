@@ -1119,7 +1119,8 @@
         const vals = { odometer: n(f.odometer), volume: n(f.volume), price: n(f.price), total: n(f.total) };
         for (const [k, x] of Object.entries(vals)) if (x != null && (!Number.isFinite(x) || x < 0)) return `${k[0].toUpperCase() + k.slice(1)} must be a number.`;
         if (!L.parseDate(f.date)) return 'Pick a valid date.';
-        const entry = F.complete({ vehicleId: v.id, date: f.date, ...vals, full: f.full !== 'no', station: f.station, grade: f.grade, notes: f.notes });
+        const entry = F.complete({ vehicleId: v.id, date: f.date, ...vals, full: f.full !== 'no', station: f.station, grade: f.grade, notes: f.notes,
+          time: start.time || '', ref: start.ref || '' }); // from the receipt, kept to spot it if imported again
         if (!entry.total) return `Enter the total, or the ${volName(v)}s and the price.`;
         if (existing) Object.assign(existing, entry);
         else data.fuel.push({ id: uid(), ...entry });
@@ -1208,10 +1209,15 @@
   function readFuel(v, receipts, note) {
     const fills = receipts.map((r) => F.toFillUp(r, v, today()));
     if (!fills.length) return `Couldn't find a fuel purchase in that. It needs at least the total, or the ${volName(v)}s and price.`;
-    const key = (f) => f.date + '|' + Number(f.total).toFixed(2);
-    const have = new Set(fuelFor(v).map(key));
+    // the same receipt twice: its own transaction number, or the same date and total
+    const keys = (f) => [f.date + '|' + Number(f.total).toFixed(2), ...(f.ref ? ['ref|' + f.ref] : [])];
+    const have = new Set(fuelFor(v).flatMap(keys));
     const fresh = [];
-    for (const f of fills) if (!have.has(key(f))) { have.add(key(f)); fresh.push(f); } // also drops the same PDF picked twice
+    for (const f of fills) {
+      if (keys(f).some((k) => have.has(k))) continue;
+      keys(f).forEach((k) => have.add(k)); // also drops the same PDF picked twice
+      fresh.push(f);
+    }
     if (!fresh.length) return 'Those receipts are already in the fuel log.';
     if (fresh.length === 1 && !note) { setTimeout(() => fuelForm(null, fresh[0]), 80); return; }
     fresh.sort((a, b) => (a.date < b.date ? -1 : 1));
