@@ -7,7 +7,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node scripts/check-mobile.js && node test/logic.test.js && node test/updater.test.js && node test/sync.test.js && node test/carfax.test.js && node test/car3d.test.js && node test/carlook.test.js && node test/themes.test.js && node test/workorder.test.js",
+    "test": "node scripts/check-mobile.js && node test/logic.test.js && node test/updater.test.js && node test/sync.test.js && node test/carfax.test.js && node test/car3d.test.js && node test/carlook.test.js && node test/themes.test.js && node test/fuel.test.js && node test/workorder.test.js",
     "sync-version": "node scripts/sync-version.js",
     "set-repo": "node scripts/set-repo.js",
     "publish-mobile": "node scripts/publish-mobile.js",

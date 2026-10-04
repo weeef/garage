@@ -4,6 +4,7 @@
   const S = window.GarageSync;
   const C = window.GarageCarfax;
   const G3 = window.GarageCar3D;
+  const F = window.GarageFuel;
   const TH = window.GarageThemes;
   const GL = window.GarageCarLook;
   const W = window.GarageWorkOrder;
@@ -14,7 +15,7 @@
   const SYNC_KEY = 'garage-log-sync';
   const clone = (x) => JSON.parse(JSON.stringify(x));
 
-  let data = { vehicles: [], logs: [], schedules: [] };
+  let data = { vehicles: [], logs: [], schedules: [], fuel: [] };
   let vehicleId = null;
   let view = 'home';
   let storageOk = true;
@@ -332,6 +333,7 @@
       () => {
         data.logs = data.logs.filter((l) => l.vehicleId !== v.id);
         data.schedules = data.schedules.filter((s) => s.vehicleId !== v.id);
+        data.fuel = data.fuel.filter((f) => f.vehicleId !== v.id);
         data.vehicles = data.vehicles.filter((x) => x.id !== v.id);
         vehicleId = data.vehicles[0]?.id || null;
         persist(); render();
@@ -385,7 +387,7 @@
         const entry = { vehicleId: v.id, service: f.service, date: f.date, odometer: odo, cost, by: f.by, notes: f.notes };
         if (existing) Object.assign(existing, entry);
         else data.logs.push({ id: uid(), ...entry });
-        v.odometer = L.highestOdometer(v, data.logs);
+        v.odometer = L.highestOdometer(v, [...data.logs, ...data.fuel]);
         persist(); render();
         toast(existing ? 'ENTRY UPDATED' : 'SERVICE LOGGED');
       }
@@ -492,6 +494,7 @@
     return `
       <h2 class="title">${esc(v.name)}${sub ? `<small>${esc(sub)}</small>` : ''}</h2>
       ${carStageHtml(v)}
+      ${fuelCardHtml(v)}
       ${summary}
       <div class="tiles">
         <button class="tile odo" data-action="odo"><div class="k">Odometer · tap to update</div><div class="v">${fmtInt(v.odometer)} ${unit(v)}</div></button>
@@ -539,6 +542,35 @@
     return `<div class="row"><h1><span class="rule"></span>Service log · ${rows.length}</h1>
       <button class="btn ghost small" data-action="import">IMPORT</button>
       <button class="btn ghost small" data-action="csv">CSV</button></div>${body}`;
+  }
+
+  function viewFuel(v) {
+    const fills = fuelFor(v).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.odometer || 0) - (a.odometer || 0)));
+    const st = F.fuelStats(fills, v);
+    const tile = (k, val, sub) => `<div class="tile"><div class="k">${k}</div><div class="v">${val}</div><div class="s">${sub || '&nbsp;'}</div></div>`;
+    const tiles = fills.length ? `<div class="tiles">
+        ${tile(`${new Date().getFullYear()} so far`, money(st.thisYear), `${money(st.last12)} in the last 12 months`)}
+        ${tile('Per year', st.perYear != null ? money(st.perYear) : '—', st.perMonth != null ? `≈ ${money(st.perMonth)} a month` : 'needs a few weeks of fill-ups')}
+        ${tile('All time', money(st.total), `${fmtVol(st.volume)} ${volAbbr(v)} · ${st.count} fill-ups`)}
+        ${tile(st.economyUnit, st.economy != null ? String(st.economy) : '—', st.economy != null ? 'full-tank average' : 'needs 2 full fills with odometer')}
+        ${tile(`Avg per ${volAbbr(v)}`, fmtPrice(st.avgPrice), '')}
+        ${tile(`Fuel per ${unit(v)}`, st.costPerDistance != null ? '$' + st.costPerDistance.toFixed(3) : '—', st.costPerDistance != null ? 'across logged odometer range' : 'needs odometer on 2+ fill-ups')}
+      </div>` : '';
+    const years = st.byYear.length > 1 || (st.byYear[0] && st.byYear[0].year !== new Date().getFullYear())
+      ? `<div class="cards">${st.byYear.map((y) => `<div class="card"><div class="head"><span class="name">${y.year}</span><span class="amt">${money(y.total)}</span></div>
+          <div class="meta">${y.fills} fill-ups · ${fmtVol(y.volume)} ${volAbbr(v)}</div></div>`).join('')}</div>` : '';
+    const body = fills.length
+      ? `<div class="cards">${fills.map((f) => `<div class="card">
+          <div class="head"><span class="name">${esc(f.station || 'Fill-up')}${f.grade ? ' · ' + esc(gradeLabel(f.grade)) : ''}</span><span class="amt">${money(f.total)}</span></div>
+          <div class="meta">${esc(f.date)}${f.odometer ? ` · ${fmtInt(f.odometer)} ${unit(v)}` : ''} · ${fmtVol(f.volume)} ${volAbbr(v)} @ ${fmtPrice(f.price)}${f.full === false ? ' · partial' : ''}</div>
+          ${f.notes ? `<div class="notes">${esc(f.notes)}</div>` : ''}
+          <div class="btns"><button class="btn ghost small" data-action="editfuel" data-id="${f.id}">EDIT</button>
+            <button class="btn danger small" data-action="delfuel" data-id="${f.id}">DELETE</button></div></div>`).join('')}</div>`
+      : `<div class="empty">No fill-ups yet. Import gas receipts (a PDF, an email, or the text from a photo of the slip) or add fill-ups by hand to see what fuel costs you a year.
+          <div><button class="btn" data-action="importfuel">IMPORT RECEIPTS</button></div></div>`;
+    return `<div class="row"><h1><span class="rule"></span>Fuel · ${fills.length}</h1>
+      <button class="btn ghost small" data-action="importfuel">IMPORT</button></div>${tiles}${years ? `<h1 class="sub"><span class="rule"></span>By year</h1>${years}` : ''}
+      <h1 class="sub"><span class="rule"></span>Fill-ups</h1>${body}`;
   }
 
   function viewDue(v) {
@@ -617,11 +649,12 @@
     main.innerHTML =
       view === 'log' ? viewLog(v) :
       view === 'due' ? viewDue(v) :
+      view === 'fuel' ? viewFuel(v) :
       view === 'data' ? viewData() : viewHome(v);
 
     fab.hidden = view === 'data';
-    fab.dataset.action = view === 'due' ? 'addsched' : 'addlog';
-    fab.textContent = view === 'due' ? '+ SCHEDULE' : '+ LOG';
+    fab.dataset.action = view === 'due' ? 'addsched' : view === 'fuel' ? 'addfuel' : 'addlog';
+    fab.textContent = view === 'due' ? '+ SCHEDULE' : view === 'fuel' ? '+ FILL-UP' : '+ LOG';
     mountCar(v);
     TH.paintSwatches(main);
     savePrefs();
@@ -746,7 +779,7 @@
     confirmDialog('Replace all data?',
       `The backup has ${incoming.vehicles.length} vehicle(s) and ${incoming.logs.length} log entries. Importing overwrites everything stored here now.`,
       'REPLACE', () => {
-        data = incoming;
+        data = { ...incoming, fuel: incoming.fuel || [] };
         vehicleId = data.vehicles[0]?.id || null;
         persist(); render(); toast('BACKUP RESTORED');
       });
@@ -867,7 +900,7 @@
         for (const { duplicate, ...entry } of picked) {
           data.logs.push({ id: uid(), ...entry, ...(order ? { date, odometer: odo } : {}) });
         }
-        v.odometer = L.highestOdometer(v, data.logs);
+        v.odometer = L.highestOdometer(v, [...data.logs, ...data.fuel]);
         persist(); render();
         toast(`${picked.length} ${picked.length === 1 ? 'ENTRY' : 'ENTRIES'} IMPORTED`);
       }
@@ -1037,8 +1070,157 @@
   });
   document.addEventListener('change', (e) => { if (e.target.id === 'accentPick') render(); });
 
+  // ---------- fuel ----------
+  // Fill-ups (lib/fuel.js): typed in, or read from gas receipts. They feed the Fuel tab and the
+  // dashboard's fuel card, and count as odometer readings.
+  const fuelFor = (v) => data.fuel.filter((f) => f.vehicleId === v.id);
+  const volName = (v) => (F.volumeUnit(v) === 'L' ? 'liter' : 'gallon');
+  const volAbbr = (v) => (F.volumeUnit(v) === 'L' ? 'L' : 'gal');
+  const fmtVol = (n) => (n == null || n === '' ? '—' : Number(n).toFixed(3).replace(/\.?0+$/, ''));
+  const fmtPrice = (n) => (n == null || n === '' ? '—' : '$' + Number(n).toFixed(3));
+  const GRADE_OPTIONS = [{ value: '', label: '—' }, { value: 'regular', label: 'Regular' }, { value: 'midgrade', label: 'Midgrade' },
+    { value: 'premium', label: 'Premium' }, { value: 'diesel', label: 'Diesel' }, { value: 'e85', label: 'E85' }];
+  const gradeLabel = (g) => (GRADE_OPTIONS.find((o) => o.value === g) || {}).label || '';
+
+  function fuelForm(existing, prefill) {
+    const v = vehicle();
+    if (!v) return;
+    const start = existing || prefill || {};
+    openForm({
+      title: existing ? 'Edit fill-up' : prefill ? 'Check the receipt' : 'Add a fill-up',
+      fields: [
+        { name: 'date', label: 'Date', type: 'date', required: true, pair: true },
+        { name: 'odometer', label: `Odometer (${unit(v)}, optional)`, type: 'number', min: 0 },
+        { name: 'volume', label: `${volName(v)}s`.replace(/^./, (c) => c.toUpperCase()), type: 'number', min: 0, step: '0.001', pair: true },
+        { name: 'price', label: `Price per ${volName(v)} ($)`, type: 'number', min: 0, step: '0.001' },
+        { name: 'total', label: 'Total ($)', type: 'number', min: 0, step: '0.01', pair: true },
+        { name: 'full', label: 'Tank', type: 'select', options: [{ value: 'yes', label: 'Filled up' }, { value: 'no', label: 'Partial fill' }] },
+        { name: 'station', label: 'Station', placeholder: 'e.g. Costco', pair: true },
+        { name: 'grade', label: 'Fuel', type: 'select', options: GRADE_OPTIONS },
+        { name: 'notes', label: 'Notes', type: 'textarea' }
+      ],
+      initial: { date: today(), ...start, full: start.full === false ? 'no' : 'yes' },
+      onSubmit: (f) => {
+        const n = (x) => (x === '' ? null : Number(x));
+        const vals = { odometer: n(f.odometer), volume: n(f.volume), price: n(f.price), total: n(f.total) };
+        for (const [k, x] of Object.entries(vals)) if (x != null && (!Number.isFinite(x) || x < 0)) return `${k[0].toUpperCase() + k.slice(1)} must be a number.`;
+        if (!L.parseDate(f.date)) return 'Pick a valid date.';
+        const entry = F.complete({ vehicleId: v.id, date: f.date, ...vals, full: f.full !== 'no', station: f.station, grade: f.grade, notes: f.notes });
+        if (!entry.total) return `Enter the total, or the ${volName(v)}s and the price.`;
+        if (existing) Object.assign(existing, entry);
+        else data.fuel.push({ id: uid(), ...entry });
+        if (entry.odometer) v.odometer = L.highestOdometer(v, [...data.logs, ...data.fuel]);
+        persist(); render();
+        toast(existing ? 'FILL-UP UPDATED' : 'FILL-UP ADDED');
+      }
+    });
+  }
+
+  function deleteFuel(id) {
+    const f = data.fuel.find((x) => x.id === id);
+    if (!f) return;
+    confirmDialog('Delete fill-up?', `Remove the ${money(f.total)} fill-up from ${f.date}?`, 'DELETE', () => {
+      data.fuel = data.fuel.filter((x) => x.id !== id);
+      persist(); render();
+    });
+  }
+
+  function importFuel() {
+    const v = vehicle();
+    if (!v) return;
+    openForm({
+      title: `Fuel receipts · ${v.name}`,
+      fields: [{ name: 'text', label: 'Or paste the receipt text', type: 'textarea' }],
+      okLabel: 'READ IT',
+      onSubmit: (f) => (f.text ? readFuel(v, f.text) : 'Paste a receipt, or open a PDF.')
+    });
+    $('#f_text').rows = 7;
+    $('#dlgFields').insertAdjacentHTML('afterbegin', `<p class="hint">Gas station receipts: the paper slip, an emailed receipt
+      or a PDF. The app reads the date, ${volName(v)}s, price and total, and you check them before anything is saved.
+      Paste several receipts at once to add them together.</p>
+      <div class="import-pdf"><button type="button" class="btn" id="pdfBtn">OPEN A PDF</button>
+        <input type="file" id="pdfFile" accept="application/pdf,.pdf" hidden></div>
+      <p class="hint">For a paper receipt, point your phone's camera at it and copy the text with Live Text (iPhone) or Google Lens (Android), then paste it here.</p>`);
+    const btn = $('#pdfBtn');
+    const input = $('#pdfFile');
+    btn.onclick = () => { input.value = ''; input.click(); };
+    input.onchange = async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const err = $('#dlgError');
+      btn.disabled = true;
+      btn.textContent = 'READING…';
+      err.textContent = '';
+      try {
+        const text = await pdfText(file);
+        $('#f_text').value = text;
+        const problem = readFuel(v, text);
+        if (problem) err.textContent = problem;
+        else $('#dlg').close();
+      } catch (e) {
+        err.textContent = 'Could not read that PDF' + (e && e.message ? ': ' + e.message : '.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'OPEN A PDF';
+      }
+    };
+  }
+
+  // One receipt opens in the fill-up form to check; several are listed, then added together.
+  // Returns an error message, or nothing.
+  function readFuel(v, text) {
+    const fills = F.parseReceipts(text).map((r) => F.toFillUp(r, v, today()));
+    if (!fills.length) return `Couldn't find a fuel purchase in that. It needs at least the total, or the ${volName(v)}s and price.`;
+    const have = new Set(fuelFor(v).map((f) => f.date + '|' + Number(f.total).toFixed(2)));
+    const fresh = fills.filter((f) => !have.has(f.date + '|' + Number(f.total).toFixed(2)));
+    if (!fresh.length) return 'Those receipts are already in the fuel log.';
+    if (fresh.length === 1) { setTimeout(() => fuelForm(null, fresh[0]), 80); return; }
+    const sum = fresh.reduce((s, f) => s + (f.total || 0), 0);
+    const list = fresh.map((f) => `${f.date} ${f.station || 'fuel'} ${money(f.total)}${f.volume ? ` (${fmtVol(f.volume)} ${volAbbr(v)})` : ''}`).join(' · ');
+    const skipped = fills.length - fresh.length;
+    setTimeout(() => confirmDialog(`Add ${fresh.length} fill-ups?`,
+      `${money(sum)} in all: ${list}.${skipped ? ` ${skipped} already in the log, skipped.` : ''}`, `ADD ${fresh.length}`, () => {
+        for (const f of fresh) data.fuel.push({ id: uid(), ...f });
+        v.odometer = L.highestOdometer(v, [...data.logs, ...data.fuel]);
+        persist(); render();
+        toast(`${fresh.length} FILL-UPS ADDED`);
+      }), 80);
+  }
+
+  // The dashboard's fuel highlight: the money first, then economy and the last fill-up.
+  function fuelCardHtml(v) {
+    const fills = fuelFor(v);
+    if (!fills.length) {
+      return `<div class="fuel-card empty-fuel"><div class="fuel-head"><span class="fuel-k">Fuel</span>
+          <span class="fuel-note">Track what you spend on gas: add fill-ups or import receipts, and see your yearly fuel cost here.</span></div>
+        <div class="fuel-btns"><button class="btn small" data-action="importfuel">IMPORT RECEIPTS</button>
+          <button class="btn ghost small" data-action="addfuel">+ FILL-UP</button></div></div>`;
+    }
+    const st = F.fuelStats(fills, v);
+    const year = new Date().getFullYear();
+    const last = st.last;
+    const stat = (k, val, sub) => `<div class="fuel-stat"><div class="k">${k}</div><div class="v">${val}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
+    return `<div class="fuel-card"><div class="fuel-head"><span class="fuel-k">Fuel</span>
+        <a href="#" class="link" data-action="gofuel">${st.count} fill-up${st.count === 1 ? '' : 's'} · open fuel log</a></div>
+      <div class="fuel-stats">
+        ${stat(`${year} so far`, money(st.thisYear), '')}
+        ${stat('Per year', st.perYear != null ? money(st.perYear) : '—', st.perMonth != null ? `≈ ${money(st.perMonth)} a month` : 'needs a few weeks of fill-ups')}
+        ${stat('All time', money(st.total), '')}
+        ${stat(st.economyUnit, st.economy != null ? String(st.economy) : '—', st.economy != null ? 'full-tank average' : 'needs 2 full fills with odometer')}
+        ${stat(`Avg per ${volAbbr(v)}`, fmtPrice(st.avgPrice), '')}
+      </div>
+      <div class="fuel-foot"><span>Last: ${esc(last.date)}${last.station ? ' · ' + esc(last.station) : ''} · ${money(last.total)}</span>
+        <span class="fuel-btns"><button class="btn small" data-action="addfuel">+ FILL-UP</button>
+          <button class="btn ghost small" data-action="importfuel">IMPORT</button></span></div></div>`;
+  }
+
   const actions = {
     import: importRecords,
+    addfuel: () => fuelForm(null),
+    editfuel: (id) => fuelForm(data.fuel.find((f) => f.id === id)),
+    delfuel: deleteFuel,
+    importfuel: importFuel,
+    gofuel: () => { view = 'fuel'; render(); },
     theme: (id) => setTheme({ id }),
     accentreset: () => setTheme({ ...TH.load(localStorage), accent: '' }),
     carphoto: () => { carPhoto = !carPhoto; render(); },
@@ -1093,11 +1275,12 @@
   // ---------- init ----------
   checkStorage();
   data = loadData();
+  data.fuel = data.fuel || []; // backups and data from before fuel tracking
   saved = clone(data);
   sync = loadSync();
   const prefs = loadPrefs();
   vehicleId = data.vehicles.find((v) => v.id === prefs.vehicleId)?.id || data.vehicles[0]?.id || null;
-  if (['home', 'log', 'due', 'data'].includes(prefs.view)) view = prefs.view;
+  if (['home', 'log', 'due', 'fuel', 'data'].includes(prefs.view)) view = prefs.view;
   render();
 
   // Ask the browser not to evict our data under storage pressure.

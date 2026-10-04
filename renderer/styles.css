@@ -244,3 +244,17 @@ input[type=color] { height: 34px; padding: 2px 4px; cursor: pointer; }
 .accent-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .accent-row label { font-size: 12px; color: var(--dim); letter-spacing: 1px; }
 .accent-row input[type=color] { width: 56px; }
+
+/* fuel: the dashboard highlight */
+.fuel-card { border: 1px solid var(--accent); border-left-width: 4px; background: var(--panel); padding: 12px 16px; margin-bottom: 14px; }
+.fuel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.fuel-k { color: var(--accent); font-size: 13px; letter-spacing: 3px; text-transform: uppercase; }
+.fuel-note { color: var(--dim); font-size: 13px; flex: 1; min-width: 200px; }
+.fuel-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px 18px; margin: 10px 0; }
+.fuel-stat .k { color: var(--dim); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
+.fuel-stat .v { font-size: 22px; }
+.fuel-stat:first-child .v, .fuel-stat:nth-child(2) .v { color: var(--accent); }
+.fuel-stat .s { color: var(--dim); font-size: 11px; }
+.fuel-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: var(--dim); font-size: 12px; }
+.fuel-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.empty-fuel .fuel-btns { margin-top: 10px; }

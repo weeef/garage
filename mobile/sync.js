@@ -1,7 +1,7 @@
 // Phone <-> PC sync through a private GitHub Gist. No Electron or DOM here: it runs in the desktop
 // renderer, the mobile web app and plain Node (tests), and attaches to window.GarageSync in a browser.
 //
-// How merging works: every vehicle/log/schedule carries `updatedAt` (ms), stamped when the app saves
+// How merging works: every vehicle/log/schedule/fill-up carries `updatedAt` (ms), stamped when the app saves
 // a change, and deletions are remembered in `data.deleted` ({ id: ms }). Merging two copies keeps the
 // newer version of each item and drops anything deleted after its last edit, so edits made on both
 // devices while apart all survive.
@@ -9,7 +9,7 @@
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.GarageSync = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
-  const KINDS = ['vehicles', 'logs', 'schedules'];
+  const KINDS = ['vehicles', 'logs', 'schedules', 'fuel']; // fuel: fill-ups (missing in older data)
   const FILE = 'garage-log-sync.json';
   const API = 'https://api.github.com';
 
@@ -22,7 +22,7 @@
     for (const kind of KINDS) {
       const before = new Map(((prev && prev[kind]) || []).map((x) => [x.id, x]));
       const ids = new Set();
-      for (const item of next[kind]) {
+      for (const item of next[kind] || []) {
         ids.add(item.id);
         const old = before.get(item.id);
         if (!old || strip(old) !== strip(item)) {
@@ -56,8 +56,9 @@
     const vids = new Set(out.vehicles.map((v) => v.id));
     out.logs = out.logs.filter((l) => vids.has(l.vehicleId));
     out.schedules = out.schedules.filter((s) => vids.has(s.vehicleId));
+    out.fuel = out.fuel.filter((f) => vids.has(f.vehicleId));
     for (const v of out.vehicles) {
-      const odos = out.logs.filter((l) => l.vehicleId === v.id).map((l) => l.odometer).filter(Number.isFinite);
+      const odos = [...out.logs, ...out.fuel].filter((l) => l.vehicleId === v.id).map((l) => l.odometer).filter(Number.isFinite);
       const hi = Math.max(Number(v.odometer) || 0, ...odos);
       if (hi !== v.odometer) out.vehicles[out.vehicles.indexOf(v)] = { ...v, odometer: hi };
     }
@@ -101,7 +102,7 @@
     return res.json();
   }
 
-  const emptyData = () => ({ vehicles: [], logs: [], schedules: [], deleted: {} });
+  const emptyData = () => ({ vehicles: [], logs: [], schedules: [], fuel: [], deleted: {} });
   const isData = (d) => d && Array.isArray(d.vehicles) && Array.isArray(d.logs) && Array.isArray(d.schedules);
 
   async function findGist(fetchImpl, token) {
