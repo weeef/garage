@@ -1,0 +1,8 @@
+/* Demo-mode bar under the header (scripts/demo/demo.js) */
+.demo-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 6px 14px; font-size: 12px; letter-spacing: 0.04em;
+  background: var(--bg); color: var(--text); border-bottom: 1px solid var(--line);
+}
+.demo-bar b { color: var(--accent); margin-right: 6px; }
+.demo-bar .btn { flex-shrink: 0; }
