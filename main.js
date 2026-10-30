@@ -283,14 +283,19 @@ let updater = null;
 
 function initUpdater() {
   let autoUpdater = null;
-  if (app.isPackaged) {
+  // The portable .exe runs from wherever it was saved, so there is nothing to update in place:
+  // a new version is a new download.
+  const portable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
+  if (app.isPackaged && !portable) {
     try { autoUpdater = require('electron-updater').autoUpdater; } catch { autoUpdater = null; }
   }
   updater = createUpdater({
     autoUpdater,
     enabled: Boolean(autoUpdater),
     version: app.getVersion(),
-    disabledReason: app.isPackaged
+    disabledReason: portable
+      ? 'This is the portable version: download the newest Garage-Log-Portable .exe from the GitHub Releases page.'
+      : app.isPackaged
       ? 'The updater is not available in this build.'
       : 'Updates only work in the installed app (not when run with npm start).',
     send: (s) => BrowserWindow.getAllWindows().forEach((w) => { if (!w.isDestroyed()) w.webContents.send('update:state', s); })

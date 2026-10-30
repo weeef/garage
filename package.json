@@ -39,6 +39,12 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico"
@@ -51,6 +57,9 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Garage Log",
       "artifactName": "Garage-Log-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Garage-Log-Portable-${version}.${ext}"
     },
     "publish": [
       {

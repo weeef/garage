@@ -23,10 +23,11 @@ Garage Log updates itself from **GitHub Releases**. You publish a new version on
    ```
    npm version minor --no-git-tag-version      (or: patch)
    ```
-2. Publish the desktop app, either way:
+2. Publish the desktop app, any of these ways:
+   - **From GitHub (no Node.js or Windows PC needed):** commit the version bump, then push a matching tag: `git tag v<version>` and `git push origin v<version>`. The **Release** workflow (`.github/workflows/release.yml`) runs the tests, builds the installer and the portable .exe on a Windows machine at GitHub and publishes the release. Watch it under the repo's Actions tab. It does not publish the phone app; run `npm run publish-mobile` for that.
    - **One command** (needs the token from step 4): `npm run release`. It builds the installer and publishes the release for you.
    - **By hand:** `npm run dist`, then on GitHub go to Releases > Draft a new release. Use the tag `v<version>` (e.g. `v1.2.0`, matching package.json), attach these three files from `dist\`, and click **Publish release** (not "Save draft"):
-     `Garage-Log-Setup-<version>.exe`, `Garage-Log-Setup-<version>.exe.blockmap`, `latest.yml`
+     `Garage-Log-Setup-<version>.exe`, `Garage-Log-Setup-<version>.exe.blockmap`, `latest.yml`, and `Garage-Log-Portable-<version>.exe` for people who don't want to install
 3. Publish the phone app: `npm run release` already does this (it runs `npm run publish-mobile`, which pushes the `mobile` folder to the `gh-pages` branch served at https://weeef.github.io/garage/). If you published the desktop app by hand, run `npm run publish-mobile` yourself.
    The phone app is kept level with the desktop app automatically: `npm run sync-version` copies every shared `lib/` file into `mobile/`, and `scripts/check-mobile.js` (part of `npm test`, and run before every build and release) stops the release if the phone app is missing a shared file, a version bump, or a feature the desktop app has.
 

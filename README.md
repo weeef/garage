@@ -2,7 +2,16 @@
 
 A desktop maintenance log for any vehicle. Track services, set mileage/time schedules, see what's due, and keep cost history. Everything is stored locally in one JSON file; nothing leaves your PC.
 
-## Run it
+## Download
+
+No Node.js or anything else needed: download one file from the [latest release](https://github.com/weeef/garage/releases/latest) and run it.
+
+- **`Garage-Log-Setup-<version>.exe`** (recommended): installs Garage Log with Desktop and Start Menu shortcuts and keeps itself up to date.
+- **`Garage-Log-Portable-<version>.exe`**: no install, just double-click it (from a USB stick too). It doesn't update itself; download the newer one when a release comes out. Same data folder as the installed app, so you can switch between them.
+
+Both are unsigned, so Windows SmartScreen may show "Windows protected your PC": click **More info**, then **Run anyway**. Your data is kept on uninstall.
+
+## Run from source
 
 Requires [Node.js](https://nodejs.org) 18+.
 
@@ -11,13 +20,7 @@ npm install
 npm start
 ```
 
-Build a Windows installer (output in `dist/Garage-Log-Setup-1.0.0.exe`):
-
-```
-npm run dist
-```
-
-The installer lets you pick the install folder and adds Desktop and Start Menu shortcuts. It is unsigned, so Windows SmartScreen may show "Windows protected your PC": click **More info**, then **Run anyway**. Your data is kept on uninstall.
+Build the Windows installer and portable .exe yourself (output in `dist\`): `npm run dist`. Or let GitHub build them: push a version tag and the Release workflow publishes both (see [RELEASING.md](RELEASING.md)).
 
 Updates: the app checks GitHub Releases for new versions and offers to install them. One-time setup and the publishing steps are in [RELEASING.md](RELEASING.md).
 
